@@ -1,0 +1,153 @@
+Running the tests (total of 300,000,000 comparisons) for :
+ - py (Python)
+ - php (PHP)
+ - rb (Ruby)
+ - java (Java)
+ - c (C)
+ - js (JavaScript)
+
+
+------------------------------
+---------- [ py ] ------------
+------------------------------
+Python prepare the CSV file:
+prepare_values('./values-py.txt', 10000000)
+10000000 comparisons in 344s.
+Python CSV file character set is ["\n",10000000] [",",60000000] ["-",19955940] [".",40000000] ["0",26721809] ["1",45660084] ["2",35743716] ["3",33295938] ["4",33899708] ["5",34079445] ["6",34215294] ["7",33578685] ["8",33046870] ["9",32428553]
+PHP test the Python CSV file:
+compare_values('./../py/values-py.txt')
+10000000 comparisons in 103s.
+Ruby test the Python CSV file:
+compare_values('./../py/values-py.txt')
+10000000 comparisons in 277s.
+Java test the Python CSV file:
+compare_values('./../py/values-py.txt')
+10000000 comparisons in 28s.
+C test the Python CSV file:
+compare_values('./../py/values-py.txt')
+10000000 comparisons in 17s.
+JavaScript test the Python CSV file:
+compare_values("./../py/values-py.txt")
+10000000 comparisons in 31s.
+
+
+------------------------------
+---------- [ php ] -----------
+------------------------------
+PHP prepare the CSV file:
+prepare_values('./values-php.txt', 10000000)
+10000000 comparisons in 78s.
+PHP CSV file character set is ["\n",10000000] [",",60000000] ["-",20074930] [".",39700418] ["0",24133581] ["1",43606205] ["2",33394652] ["3",31131195] ["4",31284762] ["5",31523731] ["6",31647574] ["7",31305399] ["8",30818583] ["9",30502469]
+Python test the PHP CSV file:
+compare_values('./../php/values-php.txt')
+10000000 comparisons in 88s.
+Ruby test the PHP CSV file:
+compare_values('./../php/values-php.txt')
+10000000 comparisons in 150s.
+Java test the PHP CSV file:
+compare_values('./../php/values-php.txt')
+10000000 comparisons in 24s.
+C test the PHP CSV file:
+compare_values('./../php/values-php.txt')
+10000000 comparisons in 16s.
+JavaScript test the PHP CSV file:
+compare_values("./../php/values-php.txt")
+10000000 comparisons in 31s.
+
+
+------------------------------
+---------- [ rb ] ------------
+------------------------------
+Ruby prepare the CSV file:
+prepare_values('./values-rb.txt', 10000000)
+10000000 comparisons in 224s.
+Ruby CSV file character set is ["\n",10000000] [",",60000000] ["-",19916959] [".",20000000] ["0",24590093] ["1",41862922] ["2",31899681] ["3",29288301] ["4",29834418] ["5",30064513] ["6",30177022] ["7",29599459] ["8",29224990] ["9",28428176]
+Python test the Ruby CSV file:
+compare_values('./../rb/values-rb.txt')
+10000000 comparisons in 93s.
+PHP test the Ruby CSV file:
+compare_values('./../rb/values-rb.txt')
+10000000 comparisons in 69s.
+Java test the Ruby CSV file:
+compare_values('./../rb/values-rb.txt')
+10000000 comparisons in 26s.
+C test the Ruby CSV file:
+compare_values('./../rb/values-rb.txt')
+10000000 comparisons in 16s.
+JavaScript test the Ruby CSV file:
+compare_values("./../rb/values-rb.txt")
+10000000 comparisons in 30s.
+
+
+------------------------------
+---------- [ java ] ----------
+------------------------------
+Java prepare the CSV file:
+prepare_values('./values-java.txt', 10000000)
+10000000 comparisons in 37s.
+Java CSV file character set is ["\n",10000000] [",",60000000] ["-",19958335] [".",70000000] ["0",93355129] ["1",81772457] ["2",72476261] ["3",70262406] ["4",71595166] ["5",71947041] ["6",71916091] ["7",70549309] ["8",69788894] ["9",68544290] ["E",292]
+Python test the Java CSV file:
+compare_values('./../java/values-java.txt')
+10000000 comparisons in 110s.
+PHP test the Java CSV file:
+compare_values('./../java/values-java.txt')
+10000000 comparisons in 122s.
+Ruby test the Java CSV file:
+compare_values('./../java/values-java.txt')
+10000000 comparisons in 167s.
+C test the Java CSV file:
+compare_values('./../java/values-java.txt')
+10000000 comparisons in 21s.
+JavaScript test the Java CSV file:
+compare_values("./../java/values-java.txt")
+10000000 comparisons in 37s.
+
+
+------------------------------
+---------- [ c ] -------------
+------------------------------
+C prepare the CSV file:
+prepare_values('./values-c.txt', 10000000)
+10000000 comparisons in 67s.
+C CSV file character set is ["\n",10000000] [",",60000000] ["-",19999314] [".",40003886] ["0",65925401] ["1",85552177] ["2",75357129] ["3",72958990] ["4",73123689] ["5",73345206] ["6",73461335] ["7",73256194] ["8",72674509] ["9",72313676] ["e",34]
+Python test the C CSV file:
+compare_values('./../c/values-c.txt')
+10000000 comparisons in 109s.
+PHP test the C CSV file:
+compare_values('./../c/values-c.txt')
+10000000 comparisons in 118s.
+Ruby test the C CSV file:
+compare_values('./../c/values-c.txt')
+10000000 comparisons in 167s.
+Java test the C CSV file:
+compare_values('./../c/values-c.txt')
+10000000 comparisons in 43s.
+JavaScript test the C CSV file:
+compare_values("./../c/values-c.txt")
+10000000 comparisons in 36s.
+
+
+------------------------------
+---------- [ js ] ------------
+------------------------------
+JavaScript prepare the CSV file:
+prepare_values("./values-js.txt", 10000000)
+10000000 comparisons in 69s.
+JavaScript CSV file character set is ["\n",10000000] [",",60000000] ["-",19955965] [".",40000000] ["0",31319644] ["1",51581043] ["2",36547122] ["3",32825225] ["4",33324459] ["5",33560826] ["6",33680211] ["7",33180568] ["8",32545170] ["9",31993818]
+Python test the JavaScript CSV file:
+compare_values('./../js/values-js.txt')
+10000000 comparisons in 92s.
+PHP test the JavaScript CSV file:
+compare_values('./../js/values-js.txt')
+10000000 comparisons in 73s.
+Ruby test the JavaScript CSV file:
+compare_values('./../js/values-js.txt')
+10000000 comparisons in 159s.
+Java test the JavaScript CSV file:
+compare_values('./../js/values-js.txt')
+10000000 comparisons in 27s.
+C test the JavaScript CSV file:
+compare_values('./../js/values-js.txt')
+10000000 comparisons in 16s.
+
+Result : all languages produce the same output, with a tolerance of 1e-10.
