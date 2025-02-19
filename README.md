@@ -71,7 +71,53 @@ puts delta_e
 ```
 
 ## Contributing
-Contributions are welcome! Please open an issue or submit a pull request if you have any improvements or suggestions.
+Contributions are welcome! Please open an issue or submit a pull request if you have any improvements or suggestions. Also, we aim to extend the compatibility of the `deltaE-2000` function to additional programming languages to meet the diverse needs of our users. Contributions are encouraged!
+
+### Planned Languages
+- **Go**: In Progress
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **Rust**: In Progress
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **Swift**: Planned
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **Kotlin**: Planned
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **TypeScript**: Planned
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **MATLAB**: Planned
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+  
+- **R**: Planned
+  - [ ] Implement the `deltaE-2000` function.
+  - [ ] Write usage documentation.
+  - [ ] Create unit tests.
+
+### How to Contribute
+Here’s how you can help:
+1. **Choose a Language**: Pick one of the planned languages that interests you.
+2. **Implement the Function**: Develop the `deltaE-2000` function in the chosen language.
+3. **Write Documentation**: Add a section in the `README.md` for the new language, including usage examples.
+4. **Create Tests**: Write unit tests to ensure the function produces consistent results with a tolerance of 1e-10.
+5. **Submit a Pull Request**: Once your implementation is complete, submit a pull request for review.
+
+Thank you for your contributions and helping us make this project better!
 
 ## License
 This project is released into the public domain.
