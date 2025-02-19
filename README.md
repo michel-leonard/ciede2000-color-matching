@@ -71,7 +71,7 @@ puts delta_e
 ```
 
 ## Contributing
-Contributions are welcome! Please open an issue or submit a pull request if you have any improvements or suggestions. Also, we aim to extend the compatibility of the `deltaE-2000` function to additional programming languages to meet the diverse needs of our users. Contributions are encouraged!
+Contributions are welcome! Please open an issue or submit a pull request if you have any improvements or suggestions. Also, we aim to extend the compatibility of the `deltaE-2000` function to additional programming languages to meet the diverse needs of the users. Contributions are encouraged!
 
 ### Planned Languages
 - **Go**: In Progress
@@ -112,7 +112,7 @@ Contributions are welcome! Please open an issue or submit a pull request if you 
 ### How to Contribute
 Here’s how you can help:
 1. **Choose a Language**: Pick one of the planned languages that interests you.
-2. **Implement the Function**: Develop the `deltaE-2000` function in the chosen language.
+2. **Implement the Function**: Develop the `deltaE-2000` function in the chosen language, based on implementations.
 3. **Write Documentation**: Add a section in the `README.md` for the new language, including usage examples.
 4. **Create Tests**: Write unit tests to ensure the function produces consistent results with a tolerance of 1e-10.
 5. **Submit a Pull Request**: Once your implementation is complete, submit a pull request for review.
