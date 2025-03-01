@@ -27,7 +27,7 @@ void rgb_to_xyz(double *color) {
 	color[1] = y;
 	color[2] = z;
 }
-void xyz_to_labf(double *color) {
+void xyz_to_lab(double *color) {
 	// Reference white point (D65)
 	double refX = 95.047;
 	double refY = 100.000;
@@ -50,7 +50,11 @@ void xyz_to_labf(double *color) {
 	color[1] = a;
 	color[2] = b;
 }
-void lab_to_xyzf(double *color) {
+void rgb_to_lab(double *color) {
+	rgb_to_xyz(color);
+	xyz_to_lab(color);
+}
+void lab_to_xyz(double *color) {
 	// Reference white point (D65)
 	double refX = 95.047;
 	double refY = 100.000;
@@ -72,7 +76,7 @@ void lab_to_xyzf(double *color) {
 	color[1] = y * refY;
 	color[2] = z * refZ;
 }
-void xyz_to_rgbf(double *color) {
+void xyz_to_rgb(double *color) {
 	// Normalize for the sRGB color space
 	color[0] /= 100.0;
 	color[1] /= 100.0;
@@ -91,4 +95,8 @@ void xyz_to_rgbf(double *color) {
 	color[0] = floor(min(max(0.0, r * 255.0), 255.0) + 0.5);
 	color[1] = floor(min(max(0.0, g * 255.0), 255.0) + 0.5);
 	color[2] = floor(min(max(0.0, b * 255.0), 255.0) + 0.5);
+}
+void lab_to_rgb(double *color) {
+	lab_to_xyz(color);
+	xyz_to_rgb(color);
 }

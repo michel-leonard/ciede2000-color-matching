@@ -50,6 +50,10 @@ void xyz_to_labf(float *color) {
 	color[1] = a;
 	color[2] = b;
 }
+void rgb_to_labf(float *color) {
+	rgb_to_xyzf(color);
+	xyz_to_labf(color);
+}
 void lab_to_xyzf(float *color) {
 	// Reference white point (D65)
 	float refX = 95.047f;
@@ -91,4 +95,8 @@ void xyz_to_rgbf(float *color) {
 	color[0] = floorf(min(max(0.0f, r * 255.0f), 255.0f) + 0.5f);
 	color[1] = floorf(min(max(0.0f, g * 255.0f), 255.0f) + 0.5f);
 	color[2] = floorf(min(max(0.0f, b * 255.0f), 255.0f) + 0.5f);
+}
+void lab_to_rgbf(float *color) {
+	lab_to_xyzf(color);
+	xyz_to_rgbf(color);
 }
