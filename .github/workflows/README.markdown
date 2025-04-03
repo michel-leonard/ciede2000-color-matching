@@ -38,9 +38,9 @@ The verification script will output a summary similar to this :
 
 ```
 CIEDE2000 Verification Summary :
-- Last Verified Line : 60.6,-51.2,28.8,2.0,78.0,-86.0,71.03024228838939
-- Duration (ms) : 22944
+- Last Verified Line : 34.0,68.0,68.4,11.0,118.0,119.0,19.292688201626444
+- Duration (ms) : 37630
 - Successes : 5000000
 - Errors : 0
-- Maximum Difference : 2.5579538487363607e-13
+- Maximum Difference : 2.2737367544323206e-13
 ```
