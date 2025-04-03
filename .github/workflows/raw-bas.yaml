@@ -1,0 +1,47 @@
+name: VBA CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '21 22 6,21 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-vba:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up libtinfo5
+        run: |
+          sudo apt update
+          wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+          sudo apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+      
+      - name: Set up FreeBASIC
+        run: |
+          wget https://unlimited.dl.sourceforge.net/project/fbc/FreeBASIC-1.10.1/Binaries-Linux/FreeBASIC-1.10.1-ubuntu-22.04-x86_64.tar.xz?viasf=1 -O file.tar.xz
+          tar -xf file.tar.xz
+          sudo mv FreeBASIC-1.10.1-ubuntu-22.04-x86_64 FreeBASIC
+          ./FreeBASIC/bin/fbc --version
+      
+      - name: Compile the VBA script
+        run: |
+          sudo cp -p tests/bas/ciede-2000-testing.bas FreeBASIC/bin/ciede-2000-testing.bas
+          cd ./FreeBASIC/bin && ./fbc ciede-2000-testing.bas
+
+      - name: Run ΔE2000 testing and verify output
+        run: ./FreeBASIC/bin/ciede-2000-testing 5000000 | node .github/workflows/scripts/stdin-verifier.js > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: Output meets expected criteria."
+          else
+            echo "❌ Verification failed: Please check the test output."
+            exit 1
+          fi

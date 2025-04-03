@@ -1,0 +1,34 @@
+name: Julia CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '17 22 8,23 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-julia:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          version: '1.9'
+
+      - name: Run ΔE2000 testing and verify output
+        run: julia tests/jl/ciede-2000-testing.jl 5000000 | node .github/workflows/scripts/stdin-verifier.js > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: Output meets expected criteria."
+          else
+            echo "❌ Verification failed: Please check the test output."
+            exit 1
+          fi
