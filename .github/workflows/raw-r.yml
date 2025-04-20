@@ -1,0 +1,37 @@
+name: R CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '11 22 3,18 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-r:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+
+      - name: Install dependencies
+        run: |
+          Rscript -e "install.packages('renv', repos='https://cran.r-project.org')"
+          Rscript -e "if (file.exists('renv.lock')) renv::restore()"
+
+      - name: Run ΔE2000 testing and verify output
+        run: Rscript tests/r/ciede-2000-testing.r 5000000 | node .github/workflows/scripts/stdin-verifier.js > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: Output meets expected criteria."
+          else
+            echo "❌ Verification failed: Please check the test output."
+            exit 1
+          fi
