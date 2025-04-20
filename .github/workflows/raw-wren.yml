@@ -1,0 +1,35 @@
+name: Wren CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '5 22 1,16 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-wren:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Wren
+        run: |
+          git clone --depth 1 https://github.com/wren-lang/wren-cli.git
+          cd wren-cli/projects/make && make -f wren_cli.make && cd ../../..
+          echo "$(pwd)/wren-cli/bin" >> $GITHUB_PATH
+
+      - name: Run ΔE2000 testing and verify output
+        run: ./wren-cli/bin/wren_cli tests/wren/ciede-2000-testing.wren 5000000 | node .github/workflows/scripts/stdin-verifier.js > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: Output meets expected criteria."
+          else
+            echo "❌ Verification failed: Please check the test output."
+            exit 1
+          fi

@@ -1,0 +1,32 @@
+name: Racket CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '43 22 7,22 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-racket:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Racket
+        run: sudo apt update && sudo apt install -y racket
+
+      - name: Run ΔE2000 testing and verify output
+        run: racket tests/rkt/ciede-2000-testing.rkt 5000000 | node .github/workflows/scripts/stdin-verifier.js > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: Output meets expected criteria."
+          else
+            echo "❌ Verification failed: Please check the test output."
+            exit 1
+          fi
