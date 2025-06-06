@@ -1,0 +1,43 @@
+name: Pascal CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '49 15 4,18 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-pascal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Free Pascal
+        run: sudo apt-get update && sudo apt-get install -y fp-compiler
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile Pascal test file
+        run: fpc -iV && fpc -O2 -oCIEDE2000Test tests/pas/ciede-2000-testing.pas
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: tests/pas/CIEDE2000Test 10000000 | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi
+

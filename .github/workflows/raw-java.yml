@@ -1,0 +1,45 @@
+name: Java CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '35 1 14,28 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-java:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: ⚙️ Compile the Java testing program
+        run: cp -p tests/java/ciede-2000-testing.java Main.java && javac Main.java
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: java -version && java Main 10000000 | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi

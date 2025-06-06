@@ -1,0 +1,58 @@
+name: SQL CIEDE2000 Testing (MariaDB)
+
+on:
+  schedule:
+    - cron: '9 19 4,18 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-sql-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: ankane/setup-mariadb@v1
+        with:
+          mariadb-version: 11.4
+          database: my-demo
+
+      - name: ⚙️ Load the CIEDE2000 function into MariaDB
+        run: /usr/bin/mariadb -V && /usr/bin/mariadb -D my-demo < ciede-2000.sql
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: |
+          /usr/bin/mariadb -D my-demo -B -N -e "
+            SELECT
+              l1, a1, b1, l2, a2, b2,
+              ciede_2000(l1, a1, b1, l2, a2, b2) AS delta_e
+            FROM (
+              SELECT
+                ROUND(RAND() * 100, 2) AS l1,
+                ROUND(RAND() * 256 - 128, 2) AS a1,
+                ROUND(RAND() * 256 - 128, 2) AS b1,
+                ROUND(RAND() * 100, 2) AS l2,
+                ROUND(RAND() * 256 - 128, 2) AS a2,
+                ROUND(RAND() * 256 - 128, 2) AS b2
+              FROM seq_1_to_10000000
+            ) AS params;" | tr "\t" ',' | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi

@@ -1,0 +1,66 @@
+name: SQL CIEDE2000 Testing (PostgreSQL)
+
+on:
+  schedule:
+    - cron: '5 13 3,17 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-sql-postgresql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PostgreSQL
+        uses: ikalnytskyi/action-setup-postgres@v7
+
+      - name: ⚙️ Load the CIEDE2000 function into the SQL database
+        run: psql --version && psql -f tests/sql/ciede-2000.pg.sql
+        env:
+         PGSERVICE: postgres
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: |
+          psql -tA -c "\COPY (
+            SELECT
+                    l1,
+                    a1,
+                    b1,
+                    l2,
+                    a2,
+                    b2,
+                    ciede_2000(l1, a1, b1, l2, a2, b2)::numeric
+            FROM (
+                    SELECT
+                      ROUND((RANDOM() * 100)::numeric, 2) AS l1,
+                      ROUND((RANDOM() * 256 - 128)::numeric, 2) AS a1,
+                      ROUND((RANDOM() * 256 - 128)::numeric, 2) AS b1,
+                      ROUND((RANDOM() * 100)::numeric, 2) AS l2,
+                      ROUND((RANDOM() * 256 - 128)::numeric, 2) AS a2,
+                      ROUND((RANDOM() * 256 - 128)::numeric, 2) AS b2
+                    FROM generate_series(1, 10000000)
+            ) AS colors
+          ) TO STDOUT WITH CSV;" | ./verifier > test-output.txt
+        env:
+         PGSERVICE: postgres
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi
