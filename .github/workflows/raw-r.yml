@@ -1,0 +1,45 @@
+name: R CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '5 5 5,19 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-r:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+
+      - name: Install dependencies
+        run: |
+          Rscript -e 'cat("R version:", R.version.string, "\n")'
+          Rscript -e "install.packages('renv', repos='https://cran.r-project.org')"
+          Rscript -e "if (file.exists('renv.lock')) renv::restore()"
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: Rscript tests/r/ciede-2000-testing.r 10000000 | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi

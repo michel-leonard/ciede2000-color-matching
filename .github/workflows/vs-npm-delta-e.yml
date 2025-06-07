@@ -1,0 +1,21 @@
+name: ΔE2000 against npm/delta-e
+
+on:
+  schedule:
+    - cron: '24 21 2,16 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-npm-delta-e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm i delta-e
+
+      - name: 🔍 Execute a large amount of ΔE2000 test cases in JavaScript
+        run: node --version && node tests/js/vs-npm-delta-e.js 300000000

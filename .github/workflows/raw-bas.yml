@@ -1,0 +1,54 @@
+name: VBA CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '41 6 11,25 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-vba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up libtinfo5
+        run: |
+          sudo apt update
+          wget https://bit.ly/4dQ1ebA -O file.deb
+          sudo apt install ./file.deb
+
+      - name: Set up FreeBASIC
+        run: |
+          wget https://bit.ly/4dOG1Pi -O file.tar.xz
+          tar -xf file.tar.xz
+          sudo mv FreeBASIC-1.10.1-ubuntu-22.04-x86_64 FreeBASIC
+          ./FreeBASIC/bin/fbc --version
+
+      - name: ⚙️ Compile the VBA script
+        run: |
+          sudo cp -p tests/bas/ciede-2000-testing.bas FreeBASIC/bin/ciede-2000-testing.bas
+          cd ./FreeBASIC/bin && ./fbc -O 2 ciede-2000-testing.bas
+
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: ./FreeBASIC/bin/ciede-2000-testing 10000000 | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi

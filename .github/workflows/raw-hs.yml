@@ -1,0 +1,41 @@
+name: Haskell CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '36 0 8,22 * *'
+  workflow_dispatch:
+
+jobs:
+  test-ciede-2000-hs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Compile the Haskell testing program
+        run: |
+          cabal --version && cabal update && cabal install --lib random
+          ghc --version && ghc -Wall -Werror -package random -O2 -threaded -rtsopts -o test-ciede-2000 tests/hs/ciede-2000-testing.hs
+        
+      - name: 🔧 Install GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -O3 tests/c/stdin-verifier.c -o verifier -lm
+
+      - name: 🧪 Generate ΔE2000 test cases and stream to C99 verifier
+        run: ./test-ciede-2000 10000000 +RTS -N | ./verifier > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: ✅ Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✅ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi
