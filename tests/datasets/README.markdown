@@ -37,3 +37,7 @@ rgb(0, 128, 0)|rgb(144, 238, 144)|[32.85236650654](https://michel-leonard.github
 #ffebcd|#a9a9a9|[20.91950137249](https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?L1=93.920257802804&a1=2.1301812107726&b1=17.026143821677&L2=69.237795605605&a2=-2.3453350372904E-8&b2=3.2529714255602E-6)|blanchedalmond|darkgray
 #ffebcd|#8fbc8f|[25.20103637599](https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?L1=93.920257802804&a1=2.1301812107726&b1=17.026143821677&L2=72.086674174887&a2=-23.819546498099&b2=18.037752234254)|blanchedalmond|darkseagreen
 #ffebcd|#40e0d0|[30.66710995579](https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?L1=93.920257802804&a1=2.1301812107726&b1=17.026143821677&L2=81.264431181808&a2=-44.081880532502&b2=-4.0283855331044)|blanchedalmond|turquoise
+
+
+*As long as color remains a human question, ΔE2000 will remain a relevant answer.
+*
