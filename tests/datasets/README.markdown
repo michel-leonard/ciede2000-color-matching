@@ -39,5 +39,4 @@ rgb(0, 128, 0)|rgb(144, 238, 144)|[32.85236650654](https://michel-leonard.github
 #ffebcd|#40e0d0|[30.66710995579](https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?L1=93.920257802804&a1=2.1301812107726&b1=17.026143821677&L2=81.264431181808&a2=-44.081880532502&b2=-4.0283855331044)|blanchedalmond|turquoise
 
 
-*As long as color remains a human question, ΔE2000 will remain a relevant answer.
-*
+*As long as color remains a human question, ΔE2000 will remain a relevant answer.*
