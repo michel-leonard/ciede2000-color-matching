@@ -1,0 +1,34 @@
+name: ΔE2000 against Rust palette
+
+on:
+  schedule:
+    - cron: '8 6 11,25 * *'
+  workflow_dispatch:
+
+jobs:
+  test-cie-2000-palette:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Rust
+        run: |
+          command -v rustc > /dev/null || {
+            wget --timeout=5 --tries=3 -qO- https://sh.rustup.rs | sh -s -- --profile minimal -y
+            source $HOME/.cargo/env
+          }
+
+      - name: ⚙️ Compile the testing program using Cargo in Rust
+        run: |
+          rustc --version && cargo --version
+          cargo new demo
+          cp -p tests/rs/vs-palette.rs demo/src/main.rs
+          echo 'rand = "0.8"' >> demo/Cargo.toml
+          echo 'palette = "0.7.6"' >> demo/Cargo.toml
+          cargo run --manifest-path=demo/Cargo.toml --release -- 1000
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Rust
+        run: cargo run --manifest-path=demo/Cargo.toml --release -- 500000000

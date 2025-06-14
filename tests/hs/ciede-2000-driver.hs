@@ -1,0 +1,156 @@
+-- Limited Use License – March 1, 2025
+
+-- This source code is provided for public use under the following conditions :
+-- It may be downloaded, compiled, and executed, including in publicly accessible environments.
+-- Modification is strictly prohibited without the express written permission of the author.
+
+-- © Michel Leonard 2025
+
+import System.Environment (getArgs)
+import Text.Printf (printf)
+import Data.List.Split (splitOn)
+
+-- The classic CIE ΔE2000 implementation, which operates on two L*a*b* colors, and returns their difference.
+-- "l" ranges from 0 to 100, while "a" and "b" are unbounded and commonly clamped to the range of -128 to 127.
+ciede_2000 :: Double -> Double -> Double -> Double -> Double -> Double -> Double
+ciede_2000 l_1 a_1 b_1 l_2 a_2 b_2 =
+  -- Working in Haskell with the CIEDE2000 color-difference formula.
+  -- k_l, k_c, k_h are parametric factors to be adjusted according to
+  -- different viewing parameters such as textures, backgrounds...
+  let
+    k_l = 1.0
+    k_c = 1.0
+    k_h = 1.0
+    n = (\() ->
+      let
+        x = (sqrt(a_1 * a_1 + b_1 * b_1) + sqrt(a_2 * a_2 + b_2 * b_2)) * 0.5
+      -- A factor involving chroma raised to the power of 7 designed to make
+      -- the influence of chroma on the total color difference more accurate.
+        y = x * x * x * x * x * x * x
+      in 1.0 + 0.5 * (1.0 - sqrt(y / (y + 6103515625.0)))
+      )()
+    -- Since hypot is not available, sqrt is used here to calculate the
+    -- Euclidean distance while avoiding overflow/underflow.
+    c_1 = sqrt(a_1 * a_1 * n * n + b_1 * b_1)
+    c_2 = sqrt(a_2 * a_2 * n * n + b_2 * b_2)
+    -- atan2 is preferred over atan because it accurately computes the angle of
+    -- a point (x, y) in all quadrants, handling the signs of both coordinates.
+    h_1 = (\() -> let x = atan2 b_1 (a_1 * n) in if x < 0.0 then x + 2.0 * pi else x)()
+    h_2 = (\() -> let x = atan2 b_2 (a_2 * n) in if x < 0.0 then x + 2.0 * pi else x)()
+    -- Cross-implementation consistent rounding.
+    n_0 = (\() -> let x = abs(h_2 - h_1) in if pi - 1E-14 < x && x < pi + 1E-14 then pi else x)()
+    -- When the hue angles lie in different quadrants, the straightforward
+    -- average can produce a mean that incorrectly suggests a hue angle in
+    -- the wrong quadrant, the next lines handle this issue.
+    h_m = (\() ->
+      let
+        x = (h_1 + h_2) * 0.5
+        in if pi < n_0 then x + pi else x
+      )()
+    h_d = (\() ->
+      let
+        x = (h_2 - h_1) * 0.5
+        in if pi < n_0 then if 0.0 < x then x - pi else x + pi else x
+      )()
+    p = 36.0 * h_m - 55.0 * pi
+    n_2 = (\() -> let x = (c_1 + c_2) * 0.5 in x * x * x * x * x * x * x)()
+    -- The hue rotation correction term is designed to account for the
+    -- non-linear behavior of hue differences in the blue region.
+    r_t = -2.0 * sqrt(n_2 / (n_2 + 6103515625.0))
+                    * sin(pi / 3.0 * exp(p * p / (-25.0 * pi * pi)))
+    n_3 = (\() -> let x = (l_1 + l_2) * 0.5 in (x - 50.0) * (x - 50.0))()
+    -- Lightness.
+    l = (l_2 - l_1) / (k_l * (1.0 + 0.015 * n_3 / sqrt(20.0 + n_3)))
+    -- These coefficients adjust the impact of different harmonic
+    -- components on the hue difference calculation.
+    t = 1.0 + 0.24 * sin(2.0 * h_m + pi * 0.5)
+            + 0.32 * sin(3.0 * h_m + 8.0 * pi / 15.0)
+            - 0.17 * sin(h_m + pi / 3.0)
+            - 0.20 * sin(4.0 * h_m + 3.0 * pi / 20.0)
+    n_4 = c_1 + c_2
+    -- Hue.
+    h = 2.0 * sqrt(c_1 * c_2) * sin(h_d) / (k_h * (1.0 + 0.0075 * n_4 * t))
+    -- Chroma.
+    c = (c_2 - c_1) / (k_c * (1.0 + 0.0225 * n_4))
+    -- Returns the square root so that the Delta E 2000 reflects the actual geometric
+    -- distance within the color space, which ranges from 0 to approximately 185.
+    in sqrt(l * l + h * h + c * c + c * h * r_t)
+
+-- GitHub Project : https://github.com/michel-leonard/ciede2000-color-matching
+--  More Examples : https://michel-leonard.github.io/ciede2000-color-matching/discovery-generator.html
+
+-- L1 = 40.2           a1 = 14.37          b1 = -64.2226
+-- L2 = 40.2           a2 = 14.37          b2 = -64.28
+-- CIE ΔE2000 = ΔE00 = 0.02198374984
+
+-- L1 = 36.2           a1 = -68.7844       b1 = 102.5727
+-- L2 = 36.2           a2 = -68.7844       b2 = 103.273
+-- CIE ΔE2000 = ΔE00 = 0.15171210567
+
+-- L1 = 65.16          a1 = 46.241         b1 = -41.7284
+-- L2 = 66.0           a2 = 46.241         b2 = -41.7284
+-- CIE ΔE2000 = ΔE00 = 0.6859219585
+
+-- L1 = 62.92          a1 = 46.6741        b1 = 51.0
+-- L2 = 62.92          a2 = 46.6741        b2 = 49.018
+-- CIE ΔE2000 = ΔE00 = 0.87790789675
+
+-- L1 = 49.09          a1 = 115.2          b1 = -37.9
+-- L2 = 49.09          a2 = 118.1          b2 = -28.9329
+-- CIE ΔE2000 = ΔE00 = 2.59549913465
+
+-- L1 = 87.301         a1 = 10.3           b1 = 26.8
+-- L2 = 93.8           a2 = 10.3           b2 = 24.677
+-- CIE ΔE2000 = ΔE00 = 4.19574525496
+
+-- L1 = 13.2           a1 = 16.2           b1 = 91.2067
+-- L2 = 25.3           a2 = 20.65          b2 = 56.657
+-- CIE ΔE2000 = ΔE00 = 13.51702798447
+
+-- L1 = 31.4061        a1 = 70.387         b1 = 123.65
+-- L2 = 4.2            a2 = 69.5094        b2 = 110.502
+-- CIE ΔE2000 = ΔE00 = 18.66511617414
+
+-- L1 = 46.469         a1 = 89.1           b1 = 20.1
+-- L2 = 50.2           a2 = 62.0           b2 = -31.8393
+-- CIE ΔE2000 = ΔE00 = 20.98898541238
+
+-- L1 = 29.647         a1 = 119.0          b1 = -74.7
+-- L2 = 24.62          a2 = 46.85          b2 = 0.67
+-- CIE ΔE2000 = ΔE00 = 23.81961737608
+
+-------------------------------------------------
+-------------------------------------------------
+------------                         ------------
+------------    CIEDE2000 Driver     ------------
+------------                         ------------
+-------------------------------------------------
+-------------------------------------------------
+
+-- Reads a CSV file specified as the first command-line argument. For each line, the program
+-- outputs the original line with the computed Delta E 2000 color difference appended.
+
+--  Example of a CSV input line : 67.24,-14.22,70,65,8,46
+--    Corresponding output line : 67.24,-14.22,70,65,8,46,15.46723547943141064
+
+
+processLine :: String -> String
+processLine line =
+  case splitOn "," line of
+    [s1,s2,s3,s4,s5,s6] ->
+      case map read [s1,s2,s3,s4,s5,s6] of
+        [l1,a1,b1,l2,a2,b2] ->
+          let deltaE = ciede_2000 l1 a1 b1 l2 a2 b2
+          in line ++ "," ++ printf "%.17f" deltaE
+        _ -> error "Unexpected parse error on numeric values"
+    _ -> error "Line does not contain exactly 6 comma-separated values"
+
+main :: IO ()
+main = do
+  args <- getArgs
+  case args of
+    (filename:_) -> do
+      content <- readFile filename
+      let results = map processLine (lines content)
+      mapM_ putStrLn results
+    _ -> return ()

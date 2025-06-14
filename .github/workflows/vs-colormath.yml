@@ -1,0 +1,31 @@
+name: ΔE2000 against Python colormath
+
+on:
+  schedule:
+    - cron: '19 11 9,23 * *'
+  workflow_dispatch:
+
+jobs:
+  test-cie-2000-colormath:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Python
+        uses: actions/setup-python@v5
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          python-version: 3.x
+
+      - name: 📦 Set up Python and pip (alternative)
+        run: command -v pip3 > /dev/null || { sudo apt-get update && sudo apt-get install -y python3 python3-pip ; }
+
+      - name: ⚙️ Install dependencies
+        run: pip3 install colormath
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Python
+        run: python3 --version && python3 tests/py/vs-colormath.py 2000000
