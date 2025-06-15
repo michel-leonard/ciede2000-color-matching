@@ -1,0 +1,163 @@
+// Limited Use License – March 1, 2025
+
+// This source code is provided for public use under the following conditions :
+// It may be downloaded, compiled, and executed, including in publicly accessible environments.
+// Modification is strictly prohibited without the express written permission of the author.
+
+// © Michel Leonard 2025
+
+class Main {
+
+	// Expressly defining pi ensures that the code works on different platforms.
+	public static inline var M_PI:Float = 3.14159265358979323846264338328;
+
+	// The classic CIE ΔE2000 implementation, which operates on two L*a*b* colors, and returns their difference.
+	// "l" ranges from 0 to 100, while "a" and "b" are unbounded and commonly clamped to the range of -128 to 127.
+	public static function ciede_2000(l_1:Float, a_1:Float, b_1:Float, l_2:Float, a_2:Float, b_2:Float):Float {
+		// Working in Haxe with the CIEDE2000 color-difference formula.
+		// k_l, k_c, k_h are parametric factors to be adjusted according to
+		// different viewing parameters such as textures, backgrounds...
+		var k_l = 1.0;
+		var k_c = 1.0;
+		var k_h = 1.0;
+		var n = (Math.sqrt(a_1 * a_1 + b_1 * b_1) + Math.sqrt(a_2 * a_2 + b_2 * b_2)) * 0.5;
+		n = n * n * n * n * n * n * n;
+		// A factor involving chroma raised to the power of 7 designed to make
+		// the influence of chroma on the total color difference more accurate.
+		n = 1.0 + 0.5 * (1.0 - Math.sqrt(n / (n + 6103515625.0)));
+		// Since hypot is not available, sqrt is used here to calculate the
+		// Euclidean distance, without avoiding overflow/underflow.
+		var c_1 = Math.sqrt(a_1 * a_1 * n * n + b_1 * b_1);
+		var c_2 = Math.sqrt(a_2 * a_2 * n * n + b_2 * b_2);
+		// atan2 is preferred over atan because it accurately computes the angle of
+		// a point (x, y) in all quadrants, handling the signs of both coordinates.
+		var h_1 = Math.atan2(b_1, a_1 * n);
+		var h_2 = Math.atan2(b_2, a_2 * n);
+		if (h_1 < 0.0) h_1 += 2.0 * M_PI;
+		if (h_2 < 0.0) h_2 += 2.0 * M_PI;
+		n = Math.abs(h_2 - h_1);
+		// Cross-implementation consistent rounding.
+		if (M_PI - 1E-14 < n && n < M_PI + 1E-14) n = M_PI;
+		// When the hue angles lie in different quadrants, the straightforward
+		// average can produce a mean that incorrectly suggests a hue angle in
+		// the wrong quadrant, the next lines handle this issue.
+		var h_m = (h_1 + h_2) * 0.5;
+		var h_d = (h_2 - h_1) * 0.5;
+		if (M_PI < n) {
+			if (0.0 < h_d)
+				h_d -= M_PI;
+			else
+				h_d += M_PI;
+			h_m += M_PI;
+		}
+		var p = 36.0 * h_m - 55.0 * M_PI;
+		n = (c_1 + c_2) * 0.5;
+		n = n * n * n * n * n * n * n;
+		// The hue rotation correction term is designed to account for the
+		// non-linear behavior of hue differences in the blue region.
+		var r_t = -2.0 * Math.sqrt(n / (n + 6103515625.0))
+					* Math.sin(M_PI / 3.0 * Math.exp(p * p / (-25.0 * M_PI * M_PI)));
+		n = (l_1 + l_2) * 0.5;
+		n = (n - 50.0) * (n - 50.0);
+		// Lightness.
+		var l = (l_2 - l_1) / (k_l * (1.0 + 0.015 * n / Math.sqrt(20.0 + n)));
+		// These coefficients adjust the impact of different harmonic
+		// components on the hue difference calculation.
+		var t = 1.0	+ 0.24 * Math.sin(2.0 * h_m + M_PI / 2.0)
+				+ 0.32 * Math.sin(3.0 * h_m + 8.0 * M_PI / 15.0)
+				- 0.17 * Math.sin(h_m + M_PI / 3.0)
+				- 0.20 * Math.sin(4.0 * h_m + 3.0 * M_PI / 20.0);
+		n = c_1 + c_2;
+		// Hue.
+		var h = 2.0 * Math.sqrt(c_1 * c_2) * Math.sin(h_d) / (k_h * (1.0 + 0.0075 * n * t));
+		// Chroma.
+		var c = (c_2 - c_1) / (k_c * (1.0 + 0.0225 * n));
+		// Returns the square root so that the Delta E 2000 reflects the actual geometric
+		// distance within the color space, which ranges from 0 to approximately 185.
+		return Math.sqrt(l * l + h * h + c * c + c * h * r_t);
+	}
+
+	// GitHub Project : https://github.com/michel-leonard/ciede2000-color-matching
+	//  More Examples : https://michel-leonard.github.io/ciede2000-color-matching/discovery-generator.html
+
+	// L1 = 93.86          a1 = 54.6           b1 = -11.3914
+	// L2 = 93.8803        a2 = 54.6           b2 = -11.3914
+	// CIE ΔE2000 = ΔE00 = 0.01226838521
+
+	// L1 = 4.9484         a1 = -103.9691      b1 = 31.362
+	// L2 = 6.1            a2 = -105.607       b2 = 31.0
+	// CIE ΔE2000 = ΔE00 = 0.78397435566
+
+	// L1 = 77.1862        a1 = 62.6           b1 = 118.6
+	// L2 = 78.519         a2 = 62.6           b2 = 118.6
+	// CIE ΔE2000 = ΔE00 = 0.94357158005
+
+	// L1 = 38.9           a1 = 105.6765       b1 = 86.07
+	// L2 = 38.9           a2 = 105.6765       b2 = 95.6611
+	// CIE ΔE2000 = ΔE00 = 3.06111881986
+
+	// L1 = 63.3           a1 = 70.0           b1 = 69.69
+	// L2 = 63.3309        a2 = 60.34          b2 = 69.69
+	// CIE ΔE2000 = ΔE00 = 3.81919953347
+
+	// L1 = 83.331         a1 = -53.104        b1 = 87.0
+	// L2 = 84.2348        a2 = -68.7          b2 = 68.939
+	// CIE ΔE2000 = ΔE00 = 8.26439223641
+
+	// L1 = 22.0           a1 = 51.748         b1 = 86.0
+	// L2 = 24.4523        a2 = 86.5           b2 = 80.0
+	// CIE ΔE2000 = ΔE00 = 15.25691432929
+
+	// L1 = 99.59          a1 = 98.098         b1 = -62.0
+	// L2 = 80.4621        a2 = 74.0           b2 = -92.2
+	// CIE ΔE2000 = ΔE00 = 18.82219245808
+
+	// L1 = 23.808         a1 = -32.56         b1 = -38.0
+	// L2 = 14.71          a2 = -16.207        b2 = -120.5
+	// CIE ΔE2000 = ΔE00 = 19.270448545
+
+	// L1 = 63.671         a1 = -19.4684       b1 = -23.089
+	// L2 = 72.6           a2 = -116.0         b2 = -73.6
+	// CIE ΔE2000 = ΔE00 = 24.62065690087
+
+	/////////////////////////////////////////////////
+	/////////////////////////////////////////////////
+	////////////                         ////////////
+	////////////    CIEDE2000 Driver     ////////////
+	////////////                         ////////////
+	/////////////////////////////////////////////////
+	/////////////////////////////////////////////////
+
+	// Reads a CSV file specified as the first command-line argument. For each line, the program
+	// outputs the original line with the computed Delta E 2000 color difference appended.
+
+	//  Example of a CSV input line : 67.24,-14.22,70,65,8,46
+	//    Corresponding output line : 67.24,-14.22,70,65,8,46,15.46723547943141064
+
+	static function main() {
+		var args = Sys.args();
+		if (args.length == 0) {
+		  Sys.stderr().writeString("Usage: program <filename>\n");
+		  Sys.exit(1);
+		}
+		var filename = args[0];
+		var input = sys.io.File.read(filename, false); // false = no binary mode
+		try {
+		  while (true) {
+			var line = input.readLine();
+			var parts = line.split(",");
+			var L1 = Std.parseFloat(parts[0]);
+			var a1 = Std.parseFloat(parts[1]);
+			var b1 = Std.parseFloat(parts[2]);
+			var L2 = Std.parseFloat(parts[3]);
+			var a2 = Std.parseFloat(parts[4]);
+			var b2 = Std.parseFloat(parts[5]);
+			var delta = ciede_2000(L1, a1, b1, L2, a2, b2);
+			Sys.println(line + "," + delta);
+		  }
+		} catch (e:haxe.io.Eof) {
+		  // End of file reached
+		}
+		input.close();
+	}
+}

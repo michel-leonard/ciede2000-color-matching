@@ -1,0 +1,147 @@
+// Limited Use License – March 1, 2025
+
+// This source code is provided for public use under the following conditions :
+// It may be downloaded, compiled, and executed, including in publicly accessible environments.
+// Modification is strictly prohibited without the express written permission of the author.
+
+// © Michel Leonard 2025
+
+open System
+open System.IO
+
+// The classic CIE ΔE2000 implementation, which operates on two L*a*b* colors, and returns their difference.
+// "l" ranges from 0 to 100, while "a" and "b" are unbounded and commonly clamped to the range of -128 to 127.
+let ciede_2000 (l_1: float) (a_1: float) (b_1: float) (l_2: float) (a_2: float) (b_2: float) : float =
+    // Working in F# with the CIEDE2000 color-difference formula.
+    // k_l, k_c, k_h are parametric factors to be adjusted according to
+    // different viewing parameters such as textures, backgrounds...
+    let k_l = 1.0
+    let k_c = 1.0
+    let k_h = 1.0
+    let mutable n = (Math.Sqrt(a_1 * a_1 + b_1 * b_1) + Math.Sqrt(a_2 * a_2 + b_2 * b_2)) * 0.5
+    n <- n * n * n * n * n * n * n
+    // A factor involving chroma raised to the power of 7 designed to make
+    // the influence of chroma on the total color difference more accurate.
+    n <- 1.0 + 0.5 * (1.0 - Math.Sqrt(n / (n + 6103515625.0)))
+    // Since hypot is not available, sqrt is used here to calculate the
+    // Euclidean distance, without avoiding overflow/underflow.
+    let c_1 = Math.Sqrt(a_1 * a_1 * n * n + b_1 * b_1)
+    let c_2 = Math.Sqrt(a_2 * a_2 * n * n + b_2 * b_2)
+    // atan2 is preferred over atan because it accurately computes the angle of
+    // a point (x, y) in all quadrants, handling the signs of both coordinates.
+    let mutable h_1 = Math.Atan2(b_1, a_1 * n)
+    let mutable h_2 = Math.Atan2(b_2, a_2 * n)
+    if (h_1 < 0.0) then h_1 <- h_1 + 2.0 * Math.PI
+    if (h_2 < 0.0) then h_2 <- h_2 + 2.0 * Math.PI
+    n <- Math.Abs(h_2 - h_1)
+    // Cross-implementation consistent rounding.
+    if (Math.PI - 1E-14 < n && n < Math.PI + 1E-14) then n <- Math.PI
+    // When the hue angles lie in different quadrants, the straightforward
+    // average can produce a mean that incorrectly suggests a hue angle in
+    // the wrong quadrant, the next lines handle this issue.
+    let mutable h_m = (h_1 + h_2) * 0.5
+    let mutable h_d = (h_2 - h_1) * 0.5
+    if (Math.PI < n) then
+        if (0.0 < h_d) then
+            h_d <- h_d - Math.PI
+        else
+            h_d <- h_d + Math.PI
+        h_m <- h_m + Math.PI
+    let p = 36.0 * h_m - 55.0 * Math.PI
+    n <- (c_1 + c_2) * 0.5
+    n <- n * n * n * n * n * n * n
+    // The hue rotation correction term is designed to account for the
+    // non-linear behavior of hue differences in the blue region.
+    let r_t = -2.0 * Math.Sqrt(n / (n + 6103515625.0))
+                        * Math.Sin(Math.PI / 3.0 * Math.Exp(p * p / (-25.0 * Math.PI * Math.PI)))
+    n <- (l_1 + l_2) * 0.5
+    n <- (n - 50.0) * (n - 50.0)
+    // Lightness.
+    let l = (l_2 - l_1) / (k_l * (1.0 + 0.015 * n / Math.Sqrt(20.0 + n)))
+    // These coefficients adjust the impact of different harmonic
+    // components on the hue difference calculation.
+    let t = 1.0     + 0.24 * Math.Sin(2.0 * h_m + Math.PI / 2.0)
+                    + 0.32 * Math.Sin(3.0 * h_m + 8.0 * Math.PI / 15.0)
+                    - 0.17 * Math.Sin(h_m + Math.PI / 3.0)
+                    - 0.20 * Math.Sin(4.0 * h_m + 3.0 * Math.PI / 20.0)
+    n <- c_1 + c_2
+    // Hue.
+    let h = 2.0 * Math.Sqrt(c_1 * c_2) * Math.Sin(h_d) / (k_h * (1.0 + 0.0075 * n * t))
+    // Chroma.
+    let c = (c_2 - c_1) / (k_c * (1.0 + 0.0225 * n))
+    // Returns the square root so that the Delta E 2000 reflects the actual geometric
+    // distance within the color space, which ranges from 0 to approximately 185.
+    Math.Sqrt(l * l + h * h + c * c + c * h * r_t)
+
+// GitHub Project : https://github.com/michel-leonard/ciede2000-color-matching
+//  More Examples : https://michel-leonard.github.io/ciede2000-color-matching/discovery-generator.html
+
+// L1 = 36.749         a1 = -104.1822      b1 = 27.0
+// L2 = 36.749         a2 = -104.19        b2 = 27.0
+// CIE ΔE2000 = ΔE00 = 0.00145707757
+
+// L1 = 6.6            a1 = 53.02          b1 = -23.1547
+// L2 = 6.6            a2 = 52.9           b2 = -23.1547
+// CIE ΔE2000 = ΔE00 = 0.03751373935
+
+// L1 = 61.3521        a1 = -117.3         b1 = -36.476
+// L2 = 61.3521        a2 = -108.0         b2 = -40.346
+// CIE ΔE2000 = ΔE00 = 2.65247978973
+
+// L1 = 34.62          a1 = 22.89          b1 = -68.183
+// L2 = 34.62          a2 = 22.89          b2 = -58.71
+// CIE ΔE2000 = ΔE00 = 4.17062560031
+
+// L1 = 73.0           a1 = -70.7317       b1 = -9.0
+// L2 = 85.24          a2 = -115.0         b2 = -23.44
+// CIE ΔE2000 = ΔE00 = 12.59983952437
+
+// L1 = 59.0955        a1 = 119.901        b1 = -1.0
+// L2 = 49.48          a2 = 102.453        b2 = 28.2446
+// CIE ΔE2000 = ΔE00 = 14.02744379057
+
+// L1 = 43.9694        a1 = -88.7          b1 = -31.676
+// L2 = 27.82          a2 = -76.0          b2 = -56.337
+// CIE ΔE2000 = ΔE00 = 17.00108116974
+
+// L1 = 80.1           a1 = -6.7813        b1 = -38.12
+// L2 = 62.9           a2 = 39.3           b2 = -85.7464
+// CIE ΔE2000 = ΔE00 = 18.96646910116
+
+// L1 = 50.5           a1 = 117.8          b1 = 67.2
+// L2 = 6.1            a2 = -121.0         b2 = -26.0
+// CIE ΔE2000 = ΔE00 = 98.67009582591
+
+// L1 = 43.943         a1 = -109.724       b1 = -53.0
+// L2 = 54.0           a2 = 81.9024        b2 = -27.8
+// CIE ΔE2000 = ΔE00 = 102.8015477641
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+////////////                         ////////////
+////////////    CIEDE2000 Driver     ////////////
+////////////                         ////////////
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+
+// Reads a CSV file specified as the first command-line argument. For each line, the program
+// outputs the original line with the computed Delta E 2000 color difference appended.
+
+//  Example of a CSV input line : 67.24,-14.22,70,65,8,46
+//    Corresponding output line : 67.24,-14.22,70,65,8,46,15.46723547943141064
+
+let args = Environment.GetCommandLineArgs()
+if args.Length > 0 then
+    File.ReadLines(args[1])
+    |> Seq.iter (fun line ->
+        let parts = line.Split(',')
+        // Parse float values
+        let l1 = Double.Parse(parts.[0])
+        let a1 = Double.Parse(parts.[1])
+        let b1 = Double.Parse(parts.[2])
+        let l2 = Double.Parse(parts.[3])
+        let a2 = Double.Parse(parts.[4])
+        let b2 = Double.Parse(parts.[5])
+        let deltaE = ciede_2000 l1 a1 b1 l2 a2 b2
+        printfn "%s,%.17g" line deltaE
+    )

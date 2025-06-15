@@ -1,0 +1,32 @@
+name: ΔE2000 against Netflix VMAF
+
+on:
+  schedule:
+    - cron: '8 6 11,25 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks the Delta E 2000 with the Netflix VMAF."
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/c"
+
+jobs:
+  test-cie-2000-netflix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: 🔧 Initialize the sources
+        run: |
+          cp -p ciede-2000.c tests/c/prelude.c
+          wget -qO- https://raw.githubusercontent.com/Netflix/vmaf/b9ac69e6c4231fad0465021f9e31a841a18261db/libvmaf/src/feature/ciede.c | \
+          sed -n '127,237p' | sed 's/float/double/g;s/powf/pow/g;s/fabsf/fabs/g' >> tests/c/prelude.c
+          gcc -std=c99 -Wall -pedantic -Ofast tests/c/vs-netflix.c -o ciede-2000-test -lm
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in C99
+        run: ./ciede-2000-test 100000000

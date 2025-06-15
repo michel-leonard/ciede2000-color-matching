@@ -1,0 +1,154 @@
+// Limited Use License – March 1, 2025
+
+// This source code is provided for public use under the following conditions :
+// It may be downloaded, compiled, and executed, including in publicly accessible environments.
+// Modification is strictly prohibited without the express written permission of the author.
+
+// © Michel Leonard 2025
+
+// The classic CIE ΔE2000 implementation, which operates on two L*a*b* colors, and returns their difference.
+// "l" ranges from 0 to 100, while "a" and "b" are unbounded and commonly clamped to the range of -128 to 127.
+var ciede_2000 = Fn.new { |l_1, a_1, b_1, l_2, a_2, b_2|
+	// Working in Wren with the CIEDE2000 color-difference formula.
+	// k_l, k_c, k_h are parametric factors to be adjusted according to
+	// different viewing parameters such as textures, backgrounds...
+	var k_l = 1.0
+	var k_c = 1.0
+	var k_h = 1.0
+	var n = ((a_1 * a_1 + b_1 * b_1).sqrt + (a_2 * a_2 + b_2 * b_2).sqrt) * 0.5
+	n = n * n * n * n * n * n * n
+	// A factor involving chroma raised to the power of 7 designed to make
+	// the influence of chroma on the total color difference more accurate.
+	n = 1.0 + 0.5 * (1.0 - (n / (n + 6103515625.0)).sqrt)
+	// hypot from "Math", rather than sqrt used here can calculate
+	// Euclidean distance while avoiding overflow/underflow.
+	var c_1 = (a_1 * a_1 * n * n + b_1 * b_1).sqrt
+	var c_2 = (a_2 * a_2 * n * n + b_2 * b_2).sqrt
+	// atan2 is preferred over atan because it accurately computes the angle of
+	// a point (x, y) in all quadrants, handling the signs of both coordinates.
+	var h_1 = b_1.atan(a_1 * n)
+	var h_2 = b_2.atan(a_2 * n)
+	if (h_1 < 0.0) h_1 = h_1 + 2.0 * Num.pi
+	if (h_2 < 0.0) h_2 = h_2 + 2.0 * Num.pi
+	n = (h_2 - h_1).abs
+	// Cross-implementation consistent rounding.
+	if (Num.pi - 1E-14 < n && n < Num.pi + 1E-14) n = Num.pi
+	// When the hue angles lie in different quadrants, the straightforward
+	// average can produce a mean that incorrectly suggests a hue angle in
+	// the wrong quadrant, the next lines handle this issue.
+	var h_m = (h_1 + h_2) * 0.5
+	var h_d = (h_2 - h_1) * 0.5
+	if (Num.pi < n) {
+		if (0.0 < h_d) {
+			h_d = h_d - Num.pi
+		} else {
+			h_d = h_d + Num.pi
+		}
+		h_m = h_m + Num.pi
+	}
+	var p = 36.0 * h_m - 55.0 * Num.pi
+	n = (c_1 + c_2) * 0.5
+	n = n * n * n * n * n * n * n
+	// The hue rotation correction term is designed to account for the
+	// non-linear behavior of hue differences in the blue region.
+	var r_t = -2.0 * (n / (n + 6103515625.0)).sqrt * (Num.pi / 3.0 *
+		2.718281828459045235360287471353.pow(p * p / (-25.0 * Num.pi * Num.pi))).sin
+	n = (l_1 + l_2) * 0.5
+	n = (n - 50.0) * (n - 50.0)
+	// Lightness.
+	var l = (l_2 - l_1) / (k_l * (1.0 + 0.015 * n / (20.0 + n).sqrt))
+	// These coefficients adjust the impact of different harmonic
+	// components on the hue difference calculation.
+	var t = 1.0 +	0.24 * (2.0 * h_m + Num.pi * 0.5).sin +
+			0.32 * (3.0 * h_m + 8.0 * Num.pi / 15.0).sin -
+			0.17 * (h_m + Num.pi / 3.0).sin -
+			0.20 * (4.0 * h_m + 3.0 * Num.pi / 20.0).sin
+	n = c_1 + c_2
+	// Hue.
+	var h = 2.0 * (c_1 * c_2).sqrt * h_d.sin / (k_h * (1.0 + 0.0075 * n * t))
+	// Chroma.
+	var c = (c_2 - c_1) / (k_c * (1.0 + 0.0225 * n))
+	// Returns the square root so that the Delta E 2000 reflects the actual geometric
+	// distance within the color space, which ranges from 0 to approximately 185.
+	return (l * l + h * h + c * c + c * h * r_t).sqrt
+}
+
+// GitHub Project : https://github.com/michel-leonard/ciede2000-color-matching
+//  More Examples : https://michel-leonard.github.io/ciede2000-color-matching/discovery-generator.html
+
+// L1 = 18.067         a1 = 53.424         b1 = -11.0
+// L2 = 18.1           a2 = 53.424         b2 = -11.0
+// CIE ΔE2000 = ΔE00 = 0.02238630057
+
+// L1 = 23.225         a1 = -56.262        b1 = 37.522
+// L2 = 23.225         a2 = -62.197        b2 = 37.522
+// CIE ΔE2000 = ΔE00 = 1.76952019311
+
+// L1 = 11.2           a1 = 102.46         b1 = 77.0
+// L2 = 17.0           a2 = 102.46         b2 = 77.0
+// CIE ΔE2000 = ΔE00 = 3.78005370147
+
+// L1 = 33.0           a1 = 110.0          b1 = -28.479
+// L2 = 37.7794        a2 = 103.906        b2 = -28.479
+// CIE ΔE2000 = ΔE00 = 4.09820234986
+
+// L1 = 92.0           a1 = 51.8509        b1 = 82.0
+// L2 = 92.408         a2 = 46.7           b2 = 63.8
+// CIE ΔE2000 = ΔE00 = 4.87196147267
+
+// L1 = 72.0753        a1 = 111.22         b1 = -15.2
+// L2 = 62.73          a2 = 97.3           b2 = -24.7412
+// CIE ΔE2000 = ΔE00 = 8.55200695438
+
+// L1 = 45.77          a1 = -44.3016       b1 = 61.3444
+// L2 = 43.049         a2 = -86.0          b2 = 95.0
+// CIE ΔE2000 = ΔE00 = 10.4210724317
+
+// L1 = 78.806         a1 = 124.83         b1 = 56.0
+// L2 = 93.0           a2 = 52.659         b2 = 46.0
+// CIE ΔE2000 = ΔE00 = 19.92913899808
+
+// L1 = 66.6969        a1 = -68.0          b1 = -49.0
+// L2 = 46.0           a2 = -73.62         b2 = -22.0
+// CIE ΔE2000 = ΔE00 = 22.30987272808
+
+// L1 = 99.92          a1 = -120.6         b1 = 109.543
+// L2 = 99.47          a2 = 121.0          b2 = -21.0
+// CIE ΔE2000 = ΔE00 = 118.75308841538
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+////////////                         ////////////
+////////////    CIEDE2000 Driver     ////////////
+////////////                         ////////////
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+
+// Reads all CSV files specified as command-line arguments. For each line, the program
+// outputs the original line with the computed Delta E 2000 color difference appended.
+
+//  Example of a CSV input line : 67.24,-14.22,70,65,8,46
+//    Corresponding output line : 67.24,-14.22,70,65,8,46,15.46723547943141064
+
+import "os" for Process
+import "io" for File, Stdout
+
+var args = Process.arguments
+if (args.count == 0) {
+	System.print("Expected one or more file paths as arguments.")
+	return
+}
+
+for (path in args) {
+	for (line in File.read(path).trim().split("\n")) {
+		var parts = line.split(",")
+		var l1 = Num.fromString(parts[0])
+		var a1 = Num.fromString(parts[1])
+		var b1 = Num.fromString(parts[2])
+		var l2 = Num.fromString(parts[3])
+		var a2 = Num.fromString(parts[4])
+		var b2 = Num.fromString(parts[5])
+		var deltaE = ciede_2000.call(l1, a1, b1, l2, a2, b2)
+		System.print(line + "," + deltaE.toString)
+	}
+}
