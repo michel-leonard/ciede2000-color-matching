@@ -1,0 +1,67 @@
+name: Zig CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '50 10 9,23 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Zig."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/zig"
+  n_csv_lines: 10000000
+
+jobs:
+  test-cie-2000-zig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Zig and GCC
+        run: |
+          if ! command -v zig > /dev/null; then
+            ZIG_VERSION="0.14.1"
+            ZIG_TARGET="x86_64-linux"
+            # Zig installation ...
+            ZIG_URL="https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_TARGET}-${ZIG_VERSION}.tar.xz"
+            # Verify if the download URL is reachable
+            if ! wget --timeout=5 --tries=2 -q --spider "$ZIG_URL"; then
+              command -v perl > /dev/null || { sudo apt-get update && sudo apt-get install -y perl ; }
+              # Dynamically fetch the Zig tarball URL for from the official JSON index
+              ZIG_URL=$(wget --timeout=5 --tries=2 -qO- https://ziglang.org/download/index.json | \
+                perl -0777 -ne "print \$1 if /\"${ZIG_TARGET}\".*?\"tarball\"\\s*:\\s*\"([^\"]+)\"/s")
+            fi
+            # Download the Zig archive from the determined URL
+            wget -q "$ZIG_URL"
+            mkdir zig
+            tar -C zig -xf "${ZIG_URL##*/}" --strip 1
+            # Add the extracted Zig folder to PATH
+            echo "$PWD/zig" >> $GITHUB_PATH
+            # Congratulations, you installed Zig in 15 seconds.
+          fi
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Zig and stream to verifier
+        run: zig version && zig run tests/zig/ciede-2000-driver.zig -O ReleaseFast --  test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
