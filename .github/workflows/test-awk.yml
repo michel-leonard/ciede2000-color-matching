@@ -1,0 +1,52 @@
+name: AWK CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '26 9 11,25 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in AWK."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/awk"
+  n_csv_lines: 10000000
+
+jobs:
+  test-cie-2000-awk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Make the AWK script directly executable (bonus)
+        run: |
+          printf '%s\n' '#!/usr/bin/awk -f' > /usr/local/bin/ciede_2000
+          cat ciede-2000.awk >> /usr/local/bin/ciede_2000
+          chmod 0755 /usr/local/bin/ciede_2000
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast -ffast-math -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in AWK and stream to verifier
+        run: awk --version && ciede_2000 < test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
