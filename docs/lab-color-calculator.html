@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Computes the CIEDE2000 color difference (ΔE2000) between two L*a*b* colors, and displays a a detailed 10-step breakdown of the calculation steps.">
+	<title>Detailed ΔE2000 Calculator</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			margin: 1rem 2rem;
+			background-image: url("data:image/svg+xml,%3Csvg 	xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 200 200'%3E%3Cdefs%3E%3Cpattern id='textPattern' patternUnits='userSpaceOnUse' width='200' height='200'%3E%3Ctext x='120' y='50' font-size='20' fill='%23d5d5d5' transform='rotate(40 40 40)' text-anchor='middle' font-family='Arial, sans-serif'%3Ewith ΔE 2000 ...%3C/text%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23textPattern)' /%3E%3C/svg%3E");
+			background-color: #f9f9f9;
+			color: #222;
+		}
+		h1 {
+			text-align: center;
+			margin-bottom: 0.25em;
+		}
+		p.intro {
+			text-align: center;
+			margin-top: 0;
+			margin-bottom: 1rem;
+			color: #555;
+		}
+		form {
+			max-width: 720px;
+			margin: 0 auto 1rem;
+			background: #fff;
+			padding: 1.5rem 2rem .5em 2em;
+			border-radius: 6px;
+			box-shadow: 0 2px 8px #f5f5f5;
+			border: 1px solid #ccc;
+		}
+		fieldset {
+			border: none;
+			margin-bottom: 1rem;
+		}
+		legend {
+			font-weight: bold;
+			margin-bottom: 0.5rem;
+		}
+		label {
+			display: inline-block;
+			width: 3rem;
+			text-align: right;
+			padding-right: .25em;
+		}
+		.color {
+			width: 2rem;
+			padding: 0.25rem 0.5rem;
+			margin: 0.1rem 0.5rem 0.1rem 1.5rem;
+			vertical-align: middle;
+			display: inline-block;
+			height: 1.25rem;
+			border-radius: .5rem;
+			box-shadow: rgba(0, 0, 0, 0.05) 0px 0px 0px 1px, rgb(209, 213, 219) 0px 0px 0px 1px inset;
+		}
+		input[type=number] {
+			width: 7rem;
+			padding: 0.25rem 0.5rem;
+			margin: 0.1rem 0.5rem 0.1rem 0;
+			font-size: 1rem;
+		}
+		textarea {
+			width: 100%;
+			height: 3.5rem;
+			font-family: monospace;
+			font-size: 0.95rem;
+			padding: 0.5rem;
+			resize: vertical;
+		}
+		#deltaE {
+			font-size: 3rem;
+			font-weight: 900;
+			color: firebrick;
+			text-align: center;
+			margin: 1rem 0;
+			user-select: text;
+		}
+		#procedureTable {
+			width: 100%;
+			max-width: 780px;
+			text-align: center;
+			margin: 0 auto 1rem;
+			border-collapse: collapse;
+			background: #fff;
+			box-shadow: 0 2px 8px #aaa;
+			font-family: Courier Next,courier,monospace;
+		}
+		#procedureTable th, #procedureTable td {
+			padding: 0.4rem 0.8rem;
+			border: 1px solid #ddd;
+		}
+		#procedureTable th {
+			background: #eee;
+		}
+		#procedureTable td[colspan="3"] {
+			padding:1rem 0;
+			background-color: #f0f0f0;
+			box-shadow: #ddd 3px 3px 6px 0 inset, rgba(255, 255, 255, 0.5) -3px -3px 6px 1px inset;
+		}
+		#procedureTable tr:last-child td:first-child, #procedureTable tr:last-child td:last-child {
+			font-weight:bold;
+			color: firebrick;
+		}
+		#copyBtn {
+			display: block;
+			margin: 2rem auto;
+			padding: .6rem 5rem;
+			font-size: 1rem;
+			border: none;
+			background: #2980b9;
+			color: white;
+			border-radius: 4px;
+			cursor: pointer;
+			user-select: none;
+			transition: background-color 0.3s;
+		}
+		#copyBtn:hover {
+			background: #1c5980;
+		}
+		#errorMsg {
+			color: #c0392b;
+			text-align: center;
+			margin: 0 auto 1rem;
+			padding: .25rem;
+			font-weight: bold;
+			font-family: Courier Next,courier,monospace;
+			background: #f9f9f9;
+			border: 1px solid #ccc;
+			width: 100%;
+			max-width: 780px;
+		}
+		#errorMsg:empty {
+			display: none;
+		}
+		footer {
+			text-align: center;
+			color: #777;
+			border: 1px solid #ccc;
+			padding: 1rem 0 2rem;
+			background: #f9f9f9;
+		}
+		fieldset legend span {
+			margin-left:.75em;
+			color: blue;
+		}
+		fieldset legend span:hover {
+			text-shadow: 0.1em 0.1em .3em #ccc;
+			cursor: pointer;
+			text-decoration: underline;
+		}
+	</style>
+</head>
+<body>
+
+<h1>Color Difference ΔE2000 Calculator</h1>
+<p class="intro">Shows the detailed calculation in 10 steps based on our <a target="_blank" href="https://github.com/michel-leonard/ciede2000-color-matching/blob/main/ciede-2000.js#L6">JavaScript</a> implementation.</p>
+
+<div id="deltaE">ΔE: –</div>
+
+<form id="deltaEForm" autocomplete="off" novalidate>
+	<fieldset>
+		<legend>Colors: CIELAB Values <span>Demo</span> <span>Clear</span></legend>
+		<label for="L1">L1</label>
+		<input type="number" step="1" id="L1" name="L1">
+		<label for="a1">a1</label>
+		<input type="number" step="1" id="a1" name="a1">
+		<label for="b1">b1</label>
+		<input type="number" step="1" id="b1" name="b1">
+		<div class="color" id="color1"></div>
+		<br>
+		<label for="L2">L2</label>
+		<input type="number" step="1" id="L2" name="L2">
+		<label for="a2">a2</label>
+		<input type="number" step="1" id="a2" name="a2">
+		<label for="b2">b2</label>
+		<input type="number" step="1" id="b2" name="b2">
+		<div class="color" id="color2"></div>
+	</fieldset>
+	<fieldset>
+		<legend>Optional Constants (kL, kC, kH)</legend>
+		<label for="kl">kL</label>
+		<input type="number" step="0.1" id="kl" name="kl" value="1">
+		<label for="kc">kC</label>
+		<input type="number" step="0.1" id="kc" name="kc" value="1">
+		<label for="kh">kH</label>
+		<input type="number" step="0.1" id="kh" name="kh" value="1">
+	</fieldset>
+	<fieldset>
+		<legend>Draft Zone</legend>
+		<textarea spellcheck="false" autofocus id="inputText" placeholder="Paste values here, e.g. 'L1 50 a1 2.5 b1 -1.3 L2 55 a2 3 b2 -1.0'"></textarea>
+	</fieldset>
+</form>
+
+<div id="errorMsg"></div>
+
+<div id="dynamic">
+	<table id="procedureTable" aria-label="Calculation procedure">
+		<thead>
+		<tr>
+			<th>Constant</th>
+			<th>Equation</th>
+			<th>Value</th>
+		</tr>
+		</thead>
+		<tbody>
+		<!-- Procedure rows here -->
+		</tbody>
+	</table>
+	<button id="copyBtn" aria-label="Copy calculation procedure">Copy Procedure</button>
+</div>
+<footer>
+	<p>Classic Software Engineering Solutions — <a href="https://bit.ly/color-difference">bit.ly/color-difference</a> | This is not an official CIE application.</p>
+</footer>
+
+<script>
+	/**
+	 *
+	 *	All Rights Reserved
+	 *
+	 *  Copyright (c) 2025 Michel Leonard
+	 *
+	 *	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	 *	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	 *	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	 *	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	 *	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	 *	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	 *	THE SOFTWARE.
+	 *
+	 */
+	(() => {
+		// Default params
+		const defaults = {
+			L1: null, a1: null, b1: null,
+			L2: null, a2: null, b2: null,
+			kl: 1, kc: 1, kh: 1,
+		};
+
+		const paramsList = ['L1','a1','b1','L2','a2','b2','kl','kc','kh']
+
+		// Elements
+		const inputs = {
+			L1: document.getElementById('L1'),
+			a1: document.getElementById('a1'),
+			b1: document.getElementById('b1'),
+			L2: document.getElementById('L2'),
+			a2: document.getElementById('a2'),
+			b2: document.getElementById('b2'),
+			kl: document.getElementById('kl'),
+			kc: document.getElementById('kc'),
+			kh: document.getElementById('kh'),
+			inputText: document.getElementById('inputText'),
+			errorMsg: document.getElementById('errorMsg'),
+			deltaE: document.getElementById('deltaE'),
+			clear: document.querySelector('fieldset legend span:last-child'),
+			demo: document.querySelector('fieldset legend span:first-child'),
+			procedureTableBody: document.querySelector('#procedureTable tbody'),
+			copyBtn: document.getElementById('copyBtn'),
+		};
+
+		function lab_to_xyz(l, a, b) {
+			// Reference white point (D65)
+			var refX = 95.047
+			var refY = 100.000
+			var refZ = 108.883
+
+			var y = (l + 16.0) / 116.0
+			var x = a / 500.0 + y
+			var z = y - b / 200.0
+
+			var x3 = x * x * x
+			var z3 = z * z * z
+
+			x = x3 < 216.0 / 24389.0 ? (x - 4.0 / 29.0) / (841.0 / 108.0) : x3
+			y = l < 8.0 ? l / (24389.0 / 27.0) : y * y * y
+			z = z3 < 216.0 / 24389.0 ? (z - 4.0 / 29.0) / (841.0 / 108.0) : z3
+
+			return [x * refX, y * refY, z * refZ]
+		}
+
+		// rgb in 0..1
+		function xyz_to_rgb(x, y, z) {
+			// Applying linear transformation using the XYZ to RGB transformation matrix.
+			var r = x * 0.032404541621141049051 + y * -0.015371385127977165753 + z * -0.004985314095560160079
+			var g = x * -0.009692660305051867686 + y * 0.018760108454466942288 + z * 0.00041556017530349983
+			var b = x * 0.000556434309591145522 + y * -0.002040259135167538416 + z * 0.010572251882231790398
+
+			// Apply gamma correction.
+			r = r < 0.0031306684424956 ? 12.92 * r : 1.055 * Math.pow(r, 1.0 / 2.4) - 0.055
+			g = g < 0.0031306684424956 ? 12.92 * g : 1.055 * Math.pow(g, 1.0 / 2.4) - 0.055
+			b = b < 0.0031306684424956 ? 12.92 * b : 1.055 * Math.pow(b, 1.0 / 2.4) - 0.055
+
+			return [r, g, b]
+		}
+
+		// rgb in 0..1
+		function lab_to_rgb(l, a, b) {
+			var xyz = lab_to_xyz(l, a, b)
+			return xyz_to_rgb(xyz[0], xyz[1], xyz[2])
+		}
+
+		// Utility: format float in %g style
+		function formatG(num) {
+			return Number(num).toPrecision(6).replace(/\.?0+$/, '');
+		}
+
+		// Format deltaE with 10 decimals fixed
+		function formatDeltaE(num) {
+			if (num === null || isNaN(num)) return "–";
+			return num.toFixed(10).replace(/\.?0+$/, '');
+		}
+
+		// Parse textarea input (remove L1 or L_1 text, extract 6 floats)
+		function parseTextarea(text) {
+			let cleaned = text.replace(/[lab]_?[12]/gi, '').replace(/ciede_?2000/gi, '');
+			// Match 6 floats (allow +, -, decimal, exponent)
+			let regex = /[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g;
+			let matches = cleaned.match(regex);
+			if (!matches || matches.length !== 6)
+				throw new Error('Parsing error: exactly 2 Lab colors required.');
+			// parse first 6 floats as L1,a1,b1,L2,a2,b2
+			let values = matches.slice(0,6).map(Number);
+			if (values.some(isNaN)) throw new Error('Parsing error: invalid number');
+			return values;
+		}
+
+		// Update URL with params (only if different from default)
+		function updateURL(params) {
+			const url = new URL(window.location);
+			if (paramsList.every(k => params[k] === defaults[k]))
+				paramsList.forEach(k => url.searchParams.delete(k))
+			else
+				['L1','a1','b1','L2','a2','b2','kl','kc','kh'].forEach(k => {
+					if (params[k] === null || params[k] === undefined) {
+						url.searchParams.delete(k);
+					} else if (/^[Lab]/.test(k) || params[k] !== defaults[k]) {
+						url.searchParams.set(k, params[k]);
+					} else {
+						url.searchParams.delete(k);
+					}
+				});
+			window.history.replaceState(null, '', url);
+		}
+
+		// Load params from URL or defaults
+		function loadFromURL() {
+			const url = new URL(window.location);
+			let params = {...defaults};
+			['L1','a1','b1','L2','a2','b2','kl','kc','kh'].forEach(k => {
+				let v = url.searchParams.get(k);
+				if (v !== null) {
+					let n = Number(v);
+					if (!isNaN(n)) params[k] = n;
+				}
+			});
+			return params;
+		}
+
+		// Set input fields from params
+		function setInputs(params) {
+			paramsList.forEach(k => {
+				if (params[k] !== null) {
+					inputs[k].value = params[k];
+				} else {
+					inputs[k].value = '';
+				}
+			});
+				
+		}
+
+		// Read values from input fields
+		function readInputs() {
+			let vals = {};
+			for (let k of ['L1','a1','b1','L2','a2','b2','kl','kc','kh']) {
+				let v = inputs[k].value.trim();
+				vals[k] = v === '' ? null : Number(v);
+			}
+			return vals;
+		}
+
+		var equation = [
+			"                            1. Compute C*ab (original chroma)",
+			["     a1_sq     ", "                      a1 * a1                       "],
+			["     b1_sq     ", "                      b1 * b1                       "],
+			["   c_orig_1    ", "                sqrt(a1_sq + b1_sq)                 "],
+			["     a2_sq     ", "                      a2 * a2                       "],
+			["     b2_sq     ", "                      b2 * b2                       "],
+			["   c_orig_2    ", "                sqrt(a2_sq + b2_sq)                 "],
+			"                          2. Compute average C*, apply G factor",
+			["     c_avg     ", "            0.5 * (c_orig_1 + c_orig_2)             "],
+			["    c_avg_3    ", "               c_avg * c_avg * c_avg                "],
+			["    c_avg_7    ", "             c_avg_3 * c_avg_3 * c_avg              "],
+			["    g_denom    ", "               c_avg_7 + 6103515625.0               "],
+			["    g_ratio    ", "                 c_avg_7 / g_denom                  "],
+			["    g_sqrt     ", "                   sqrt(g_ratio)                    "],
+			["   g_factor    ", "             1.0 + 0.5 * (1.0 - g_sqrt)             "],
+			"                        3. Compute a' components and adjusted C'",
+			["   a1_prime    ", "                   a1 * g_factor                    "],
+			["   a2_prime    ", "                   a2 * g_factor                    "],
+			["  c1_prime_sq  ", "           a1_prime * a1_prime + b1 * b1            "],
+			["  c2_prime_sq  ", "           a2_prime * a2_prime + b2 * b2            "],
+			["   c1_prime    ", "                 sqrt(c1_prime_sq)                  "],
+			["   c2_prime    ", "                 sqrt(c2_prime_sq)                  "],
+			"                          4.1 Compute h' (adjusted hue angles)",
+			["    safe_1     ", "      1e30 * (b1 === 0.0 && a1_prime === 0.0)       "],
+			["    safe_2     ", "      1e30 * (b2 === 0.0 && a2_prime === 0.0)       "],
+			["    h1_raw     ", "            atan2(b1, a1_prime + safe_1)            "],
+			["    h2_raw     ", "            atan2(b2, a2_prime + safe_2)            "],
+			["    h1_adj     ", "         h1_raw + (h1_raw < 0.0) * 2.0 * pi         "],
+			["    h2_adj     ", "         h2_raw + (h2_raw < 0.0) * 2.0 * pi         "],
+			["    delta_h    ", "                abs(h1_adj - h2_adj)                "],
+			["  h_mean_raw   ", "              0.5 * (h1_adj + h2_adj)               "],
+			["  h_diff_raw   ", "              0.5 * (h2_adj - h1_adj)               "],
+			"                             4.2 Handle hue angle wrapping",
+			["   wrap_dist   ", "                 abs(pi - delta_h)                  "],
+			["   hue_wrap    ", "         1e-14 < wrap_dist && pi < delta_h          "],
+			["    h_mean     ", "             h_mean_raw + hue_wrap * pi             "],
+			["   h_diff_hi   ", "        (hue_wrap && h_diff_raw < 0.0) * pi         "],
+			["   h_diff_lo   ", "        (hue_wrap && h_diff_hi === 0.0) * pi        "],
+			["    h_diff     ", "         h_diff_raw + h_diff_hi - h_diff_lo         "],
+			"                               5. Compute ΔL', ΔC', ΔH'",
+			["    l_delta    ", "                      L2 - L1                       "],
+			["    c_delta    ", "                c2_prime - c1_prime                 "],
+			["   c_product   ", "                c1_prime * c2_prime                 "],
+			["  c_geo_mean   ", "                  sqrt(c_product)                   "],
+			["  sin_h_diff   ", "                    sin(h_diff)                     "],
+			["    H_term     ", "           2.0 * c_geo_mean * sin_h_diff            "],
+			"                            6. Compute average L', C', and h'",
+			["     l_avg     ", "                  0.5 * (L1 + L2)                   "],
+			["     c_sum     ", "                c1_prime + c2_prime                 "],
+			"                   7. Compute weighting functions S_L, S_C, S_H and T",
+			["  l_delta_sq   ", "          (l_avg - 50.0) * (l_avg - 50.0)           "],
+			["    s_l_num    ", "                 0.015 * l_delta_sq                 "],
+			["   s_l_denom   ", "              sqrt(20.0 + l_delta_sq)               "],
+			["      S_L      ", "             1.0 + s_l_num / s_l_denom              "],
+			["      S_C      ", "                1.0 + 0.0225 * c_sum                "],
+			["    trig_1     ", "             0.17 * sin(h_mean + pi_3)              "],
+			["    trig_2     ", "        0.24 * sin(2.0 * h_mean + 0.5 * pi)         "],
+			["    trig_3     ", "       0.32 * sin(3.0 * h_mean + 1.6  * pi_3)       "],
+			["    trig_4     ", "        0.2  * sin(4.0 * h_mean + 0.15 * pi)        "],
+			["       T       ", "      1.0 - trig_1 + trig_2 + trig_3 - trig_4       "],
+			["      S_H      ", "              1.0 + 0.0075 * c_sum * T              "],
+			"                              8. Compute rotation term R_T",
+			["     c_bar     ", "            0.5 * (c1_prime + c2_prime)             "],
+			["    c_bar_3    ", "               c_bar * c_bar * c_bar                "],
+			["    c_bar_7    ", "             c_bar_3 * c_bar_3 * c_bar              "],
+			["   rc_denom    ", "               c_bar_7 + 6103515625.0               "],
+			["      R_C      ", "              sqrt(c_bar_7 / rc_denom)              "],
+			["     theta     ", "             36.0 * h_mean - 55.0 * pi              "],
+			["  theta_denom  ", "                  -25.0 * pi * pi                   "],
+			[" exp_argument  ", "            theta * theta / theta_denom             "],
+			["   exp_term    ", "                 exp(exp_argument)                  "],
+			["  delta_theta  ", "                  pi_3 * exp_term                   "],
+			["   sin_term    ", "                  sin(delta_theta)                  "],
+			["      R_T      ", "               -2.0 * R_C * sin_term                "],
+			"                              9. Normalize ΔL', ΔC', ΔH'",
+			["    L_term     ", "               l_delta / (k_L * S_L)                "],
+			["    C_term     ", "               c_delta / (k_C * S_C)                "],
+			["  H_term_norm  ", "                H_term / (k_H * S_H)                "],
+			"                                    10. Combine terms",
+			["    L_part     ", "                  L_term * L_term                   "],
+			["    C_part     ", "                  C_term * C_term                   "],
+			["    H_part     ", "             H_term_norm * H_term_norm              "],
+			["  interaction  ", "             C_term * H_term_norm * R_T             "],
+			["delta_e_squared", "       L_part + C_part + H_part + interaction       "],
+			[" delta_e_2000  ", "               sqrt(delta_e_squared)                "],
+		]
+
+		function cielog(id, val) {
+			equation[id][2] = val
+		}
+
+		function ciede_2000_functional(L1, a1, b1, L2, a2, b2, k_L, k_C, k_H) {
+			"use strict"
+
+			var pi_1 = 3.14159265358979323846
+			var pi_3 = 1.04719755119659774615
+
+			// Step 1: Compute C*ab (original chroma)
+			var a1_sq      =                          a1 * a1                         ; cielog(1, a1_sq)
+			var b1_sq      =                          b1 * b1                         ; cielog(2, b1_sq)
+			var c_orig_1     =                 Math.sqrt(a1_sq + b1_sq)                 ; cielog(3, c_orig_1)
+
+			var a2_sq      =                          a2 * a2                         ; cielog(4, a2_sq)
+			var b2_sq      =                          b2 * b2                         ; cielog(5, b2_sq)
+			var c_orig_2     =                 Math.sqrt(a2_sq + b2_sq)                 ; cielog(6, c_orig_2)
+
+			// Step 2: Compute average C*, apply G factor
+			var c_avg      =                0.5 * (c_orig_1 + c_orig_2)               ; cielog(8, c_avg)
+			var c_avg_3     =                   c_avg * c_avg * c_avg                  ; cielog(9, c_avg_3)
+			var c_avg_7     =                 c_avg_3 * c_avg_3 * c_avg                ; cielog(10, c_avg_7)
+			var g_denom     =                  c_avg_7 + 6103515625.0                  ; cielog(11, g_denom)
+			var g_ratio     =                     c_avg_7 / g_denom                    ; cielog(12, g_ratio)
+			var g_sqrt      =                    Math.sqrt(g_ratio)                    ; cielog(13, g_sqrt)
+			var g_factor     =                1.0 + 0.5 * (1.0 - g_sqrt)                ; cielog(14, g_factor)
+
+			// Step 3: Compute a' components and adjusted C'
+			var a1_prime     =                       a1 * g_factor                      ; cielog(16, a1_prime)
+			var a2_prime     =                       a2 * g_factor                      ; cielog(17, a2_prime)
+			var c1_prime_sq   =               a1_prime * a1_prime + b1 * b1              ; cielog(18, c1_prime_sq)
+			var c2_prime_sq   =               a2_prime * a2_prime + b2 * b2              ; cielog(19, c2_prime_sq)
+			var c1_prime     =                  Math.sqrt(c1_prime_sq)                  ; cielog(20, c1_prime)
+			var c2_prime     =                  Math.sqrt(c2_prime_sq)                  ; cielog(21, c2_prime)
+
+			// Step 4: Compute h' (adjusted hue angles)
+			var safe_1      =          1e30 * (b1 === 0.0 && a1_prime === 0.0)         ; cielog(23, safe_1)
+			var safe_2      =          1e30 * (b2 === 0.0 && a2_prime === 0.0)         ; cielog(24, safe_2)
+			var h1_raw      =             Math.atan2(b1, a1_prime + safe_1)            ; cielog(25, h1_raw)
+			var h2_raw      =             Math.atan2(b2, a2_prime + safe_2)            ; cielog(26, h2_raw)
+			var h1_adj      =           h1_raw + (h1_raw < 0.0) * 2.0 * pi_1           ; cielog(27, h1_adj)
+			var h2_adj      =           h2_raw + (h2_raw < 0.0) * 2.0 * pi_1           ; cielog(28, h2_adj)
+			var delta_h     =                 Math.abs(h1_adj - h2_adj)                ; cielog(29, delta_h)
+			var h_mean_raw    =                  0.5 * (h1_adj + h2_adj)                 ; cielog(30, h_mean_raw)
+			var h_diff_raw    =                  0.5 * (h2_adj - h1_adj)                 ; cielog(31, h_diff_raw)
+
+			// Handle hue angle wrapping
+			var wrap_dist    =                 Math.abs(pi_1 - delta_h)                 ; cielog(33, wrap_dist)
+			var hue_wrap     =            1e-14 < wrap_dist && pi_1 < delta_h           ; cielog(34, hue_wrap)
+			var h_mean      =               h_mean_raw + hue_wrap * pi_1               ; cielog(35, h_mean)
+
+			var h_diff_hi    =           (hue_wrap && h_diff_raw < 0.0) * pi_1          ; cielog(36, h_diff_hi)
+			var h_diff_lo    =          (hue_wrap && h_diff_hi === 0.0) * pi_1          ; cielog(37, h_diff_lo)
+			var h_diff      =            h_diff_raw + h_diff_hi - h_diff_lo            ; cielog(38, h_diff)
+
+			// Step 5: Compute ΔL', ΔC', ΔH'
+			var l_delta     =                          L2 - L1                         ; cielog(40, l_delta)
+			var c_delta     =                    c2_prime - c1_prime                   ; cielog(41, c_delta)
+			var c_product    =                    c1_prime * c2_prime                   ; cielog(42, c_product)
+			var c_geo_mean    =                   Math.sqrt(c_product)                   ; cielog(43, c_geo_mean)
+			var sin_h_diff    =                     Math.sin(h_diff)                     ; cielog(44, sin_h_diff)
+			var H_term      =               2.0 * c_geo_mean * sin_h_diff              ; cielog(45, H_term)
+
+			// Step 6: Compute average L', C', and h'
+			var l_avg      =                      0.5 * (L1 + L2)                     ; cielog(47, l_avg)
+			var c_sum      =                    c1_prime + c2_prime                   ; cielog(48, c_sum)
+
+			// Step 7: Compute weighting functions S_L, S_C, S_H and T
+			var l_delta_sq    =              (l_avg - 50.0) * (l_avg - 50.0)             ; cielog(50, l_delta_sq)
+			var s_l_num     =                    0.015 * l_delta_sq                    ; cielog(51, s_l_num)
+			var s_l_denom    =               Math.sqrt(20.0 + l_delta_sq)               ; cielog(52, s_l_denom)
+			var S_L       =                 1.0 + s_l_num / s_l_denom                ; cielog(53, S_L)
+
+			var S_C       =                   1.0 + 0.0225 * c_sum                   ; cielog(54, S_C)
+
+			var trig_1      =              0.17 * Math.sin(h_mean + pi_3)              ; cielog(55, trig_1)
+			var trig_2      =        0.24 * Math.sin(2.0 * h_mean + 0.5 * pi_1)        ; cielog(56, trig_2)
+			var trig_3      =        0.32 * Math.sin(3.0 * h_mean + 1.6  * pi_3)       ; cielog(57, trig_3)
+			var trig_4      =        0.2  * Math.sin(4.0 * h_mean + 0.15 * pi_1)       ; cielog(58, trig_4)
+			var T        =          1.0 - trig_1 + trig_2 + trig_3 - trig_4         ; cielog(59, T)
+
+			var S_H       =                 1.0 + 0.0075 * c_sum * T                 ; cielog(60, S_H)
+
+			// Step 8: Compute rotation term R_T
+			var c_bar      =                0.5 * (c1_prime + c2_prime)               ; cielog(62, c_bar)
+			var c_bar_3     =                   c_bar * c_bar * c_bar                  ; cielog(63, c_bar_3)
+			var c_bar_7     =                 c_bar_3 * c_bar_3 * c_bar                ; cielog(64, c_bar_7)
+			var rc_denom     =                  c_bar_7 + 6103515625.0                  ; cielog(65, rc_denom)
+			var R_C       =               Math.sqrt(c_bar_7 / rc_denom)              ; cielog(66, R_C)
+
+			var theta      =                36.0 * h_mean - 55.0 * pi_1               ; cielog(67, theta)
+			var theta_denom   =                    -25.0 * pi_1 * pi_1                   ; cielog(68, theta_denom)
+			var exp_argument   =                theta * theta / theta_denom               ; cielog(69, exp_argument)
+			var exp_term     =                  Math.exp(exp_argument)                  ; cielog(70, exp_term)
+			var delta_theta   =                      pi_3 * exp_term                     ; cielog(71, delta_theta)
+			var sin_term     =                   Math.sin(delta_theta)                  ; cielog(72, sin_term)
+			var R_T       =                   -2.0 * R_C * sin_term                  ; cielog(73, R_T)
+
+			// Step 9: Normalize ΔL', ΔC', ΔH'
+			var L_term      =                   l_delta / (k_L * S_L)                  ; cielog(75, L_term)
+			var C_term      =                   c_delta / (k_C * S_C)                  ; cielog(76, C_term)
+			var H_term_norm   =                   H_term / (k_H * S_H)                   ; cielog(77, H_term_norm)
+
+			// Step 10: Combine terms
+			var L_part      =                      L_term * L_term                     ; cielog(79, L_part)
+			var C_part      =                      C_term * C_term                     ; cielog(80, C_part)
+			var H_part      =                 H_term_norm * H_term_norm                ; cielog(81, H_part)
+			var interaction   =                C_term * H_term_norm * R_T                ; cielog(82, interaction)
+			var delta_e_squared =          L_part + C_part + H_part + interaction          ; cielog(83, delta_e_squared)
+			var delta_e_2000   =                Math.sqrt(delta_e_squared)                ; cielog(84, delta_e_2000)
+
+			return delta_e_2000
+		}
+
+		// Dummy calc function (replace with real calc)
+		var calculateDeltaE = params => {
+			const [r1, g1, b1] = lab_to_rgb(params.L1, params.a1, params.b1).map(e => Math.round(255 * e))
+			const [r2, g2, b2] = lab_to_rgb(params.L2, params.a2, params.b2).map(e => Math.round(255 * e))
+			document.getElementById('color1').style.background = 'rgb(' + r1 + ', ' + g1 + ', ' + b1 + ')'
+			document.getElementById('color2').style.background = 'rgb(' + r2 + ', ' + g2 + ', ' + b2 + ')'
+			const dE = ciede_2000_functional(params.L1, params.a1, params.b1, params.L2, params.a2, params.b2, params.kl, params.kc, params.kh)
+			let procedure = [ ]
+			for(let i = 0; i < equation.length; ++i) {
+				if (typeof equation[i] == "string")
+					procedure.push([equation[i]])
+				else {
+					const name = equation[i][0]
+					const formula = equation[i][1]
+					const value = equation[i][2]
+					procedure.push([name, formula, value])
+				}
+			}
+			return {deltaE: dE, procedure};
+		}
+
+		// Update procedure table
+		function updateProcedureTable(eq) {
+			const tbody = inputs.procedureTableBody;
+			tbody.innerHTML = '';
+			if (eq.length) {
+				inputs.inputText.value = ''
+				showError('ciede_2000(' + paramsList.slice(0, 6).map(e => (e = inputs[e].value, e.indexOf('.') === -1 ? e + '.0' : e)).join(', ') + ')')
+				}
+			else {
+				document.getElementById('color1').style.background = '#fff'
+				document.getElementById('color2').style.background = '#fff'
+			}
+			document.getElementById("dynamic").style.display = eq.length ? 'block' : 'none'
+			eq.forEach(row => {
+				let tr = document.createElement('tr');
+				if (row.length === 1) {
+					let message = document.createElement('td');
+					message.colSpan = 3;
+					message.textContent = row[0]
+					tr.appendChild(message);
+				} else {
+					if (/^\s*[A-Z]/.test(row[0]))
+						tr.style.fontWeight = 'bold';
+					let tdStep = document.createElement('td');
+					tdStep.textContent = row[0];
+					let tdVal = document.createElement('td');
+					tdVal.textContent = row[1];
+					let tdDesc = document.createElement('td');
+					tdDesc.textContent = formatG(row[2]);
+					tr.appendChild(tdStep);
+					tr.appendChild(tdVal);
+					tr.appendChild(tdDesc);
+				}
+				tbody.appendChild(tr);
+			});
+		}
+
+		function copyProcedure() {
+			let lines = [ ]
+			lines.push(`ΔE 2000 calculator :`)
+			lines.push(`   Color 1 :  L1 = ${L1.value}   a1 = ${a1.value}   b1 = ${b1.value}`)
+			lines.push(`   Color 2 :  L2 = ${L2.value}   a2 = ${a2.value}   b2 = ${b2.value}`)
+			lines.push(` Constants : k_L = ${kl.value}  k_C = ${kc.value}  k_H = ${kh.value}`)
+			lines.push(`      With :  pi = ${Math.PI}  and pi_3 = pi / 3`)
+			equation.forEach((row, i) => {
+				if (typeof row === "string")
+					lines.push("", row)
+				else {
+					const [n,c,v] = row
+					lines.push(`${n} = ${c} = ${formatG(v)}`)
+				}
+			})
+			lines.push("")
+			lines.push(`Result = ${formatDeltaE(equation[equation.length - 1][2])}`)
+			let text = lines.join('\n');
+			navigator.clipboard.writeText(text).then(() => {
+				alert('Procedure copied to clipboard');
+			}, () => {
+				alert('Failed to copy procedure');
+			});
+		}
+
+		// Show error message
+		function showError(msg) {
+			inputs.errorMsg.textContent = msg || '';
+		}
+
+		// Clear error
+		function clearError() {
+			showError('');
+		}
+
+		// Update all outputs from current inputs
+		function updateAll(fromTextarea=false) {
+			clearError();
+			let params;
+			try {
+				if (fromTextarea) {
+					// parse textarea (only L1,a1,b1,L2,a2,b2)
+					let vals = parseTextarea(inputs.inputText.value);
+					params = readInputs();
+					// Overwrite the 6 main params from textarea
+					['L1','a1','b1','L2','a2','b2'].forEach((k,i) => params[k] = vals[i]);
+					setInputs(params);
+				} else {
+					params = readInputs();
+				}
+
+				// If any required param missing, do nothing
+				if ([params.L1,params.a1,params.b1,params.L2,params.a2,params.b2].some(x=>x===null || isNaN(x))) {
+					inputs.deltaE.textContent = 'ΔE: –';
+					updateProcedureTable([]);
+					updateURL({});
+					return;
+				}
+
+				let {deltaE, procedure} = calculateDeltaE(params);
+
+				inputs.deltaE.textContent = `ΔE: ${formatDeltaE(deltaE)}`;
+				updateProcedureTable(procedure);
+				updateURL(params);
+			} catch(e) {
+				inputs.deltaE.textContent = 'ΔE: –';
+				updateProcedureTable([]);
+				showError(e.message);
+				updateURL({});
+			}
+		}
+
+		// Event listeners for inputs
+		['L1','a1','b1','L2','a2','b2','kl','kc','kh'].forEach(id => {
+			inputs[id].addEventListener('input', () => updateAll());
+		});
+
+		// Textarea parsing event
+		inputs.inputText.addEventListener('input', () => updateAll(true));
+
+		// Clear button
+		inputs.clear.addEventListener('click', () => {
+			inputText.value = "";
+			setInputs(defaults);
+			updateAll();
+		});
+
+		// Demo button
+		inputs.demo.addEventListener('click', () => {
+			inputText.value = "";
+			const res = { kl: 1, kc : 1, kh: 1}
+			const hi = 0.5 + Math.random() * (Math.random() < 0.5 ? 20.0 : 170.0)
+			do {
+				res.L1 = Math.round(Math.random() * 1000) / 10
+				res.L2 = Math.round(Math.random() * 1000) / 10
+				res.a1 = Math.round(Math.random() * 2560) / 10 - 128
+				res.a2 = Math.round(Math.random() * 2560) / 10 - 128
+				res.b1 = Math.round(Math.random() * 2560) / 10 - 128
+				res.b2 = Math.round(Math.random() * 2560) / 10 - 128
+			} while(hi < ciede_2000_functional(res.L1, res.a1, res.b1, res.L2, res.a2, res.b2, res.kl, res.kc, res.kh))
+				for(k in res)
+					res[k] = formatG(res[k])
+			setInputs(res);
+			updateAll();
+		});
+
+		// Copy button
+		inputs.copyBtn.addEventListener('click', () => {
+			copyProcedure();
+		});
+
+		// On load: read URL params and set inputs, then update
+		window.addEventListener('DOMContentLoaded', () => {
+			const params = loadFromURL();
+			setInputs(params);
+			updateAll();
+		});
+
+	})();
+</script>
+
+</body>
+</html>
