@@ -1,0 +1,28 @@
+name: ΔE2000 against npm/delta-e
+
+on:
+  schedule:
+    - cron: '24 21 2,16 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks the Delta E 2000 with the nmp delta-e package."
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/js"
+
+jobs:
+  test-cie-2000-npm-delta-e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Node and npm
+        run: command -v node > /dev/null || { sudo apt-get update && sudo apt-get install -y nodejs npm; }
+
+      - name: ⚙️ Install dependencies
+        run: npm --version && npm install delta-e
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in JavaScript
+        run: node --version && node tests/js/vs-npm-delta-e.js 300000000
