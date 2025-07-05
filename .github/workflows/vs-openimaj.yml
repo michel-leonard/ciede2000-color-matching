@@ -1,0 +1,52 @@
+name: ΔE2000 against OpenIMAJ
+
+on:
+  schedule:
+    - cron: '20 3 14,28 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks the Delta E 2000 with the OpenIMAJ library in Java."
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/java"
+
+jobs:
+  test-delta-e-2000-openimaj:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up JDK 17
+        uses: actions/setup-java@v3
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 📦 Set up Java (alternative)
+        run: command -v javac > /dev/null || { sudo apt-get update && sudo apt-get install -y default-jdk ; }
+
+      - name: 🔧 Initialize the Java source files with OpenIMAJ
+        run: |
+          ########################################################
+          ########       1. Rename the Java file          ########
+          ########################################################
+          cp -p tests/java/vs-openimaj.java CIEDE2000_Compare.java
+          
+          ########################################################
+          ########    2. Inject the OpenIMAJ function     ########
+          ########################################################
+          printf '%s\n' 'public class OpenIMAJ {' > OpenIMAJ.java
+          url="https://raw.githubusercontent.com/openimaj/openimaj/545969f7a99c13bb5bd02c0a30f55013e4abca72"
+          url="$url/image/image-processing/src/main/java/org/openimaj/image/analysis/colour/CIEDE2000.java"
+          wget -q -T5 -t1 "$url" -O- | sed -n '85,130p' >> OpenIMAJ.java
+          printf '\n%s\n' '}' >> OpenIMAJ.java
+
+      - name: ⚙️ Compile the Java files
+        run: javac CIEDE2000_Compare.java
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Java
+        run: java CIEDE2000_Compare 100000000

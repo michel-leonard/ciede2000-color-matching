@@ -1,0 +1,56 @@
+name: Ada CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '32 21 8,22 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Ada."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/adb"
+  n_csv_lines: 10000000
+
+jobs:
+  test-delta-e-2000-adb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Ada and GCC
+        run: |
+          command -v gnatmake > /dev/null || { sudo apt-get update && sudo apt-get install -y gnat ; }
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+          gnatmake --version && gcc --version
+
+      - name: ⚙️ Compile CIEDE2000 tester in Ada 2005
+        run: |
+          cp -p tests/adb/ciede-2000-driver.adb main.adb
+          gnatmake main.adb -gnat05 -O3 -gnatwa -gnatf -gnatwd -gnatwe -gnatws -f
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc -std=c99 -Wall -pedantic -Ofast -ffast-math -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: |
+          ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines |
+          sed -E 's/(,|^)([0-9+-]+)e([0-9+-]+)/\1\2.0e\3/gi' > test-cases.csv
+
+      - name: 🚀 Run test cases in Ada and stream to verifier
+        run: ./main test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
