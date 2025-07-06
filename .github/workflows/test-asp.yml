@@ -1,0 +1,81 @@
+name: ASP CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '50 21 11,25 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in ASP."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/asp"
+  n_csv_lines: 10000000
+
+jobs:
+  test-delta-e-2000-asp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up FreeBASIC Compiler version 1.10.1 released on 2023-12-24
+        run: |
+          params="-q -T5 -t1"
+          ########################################################################################
+          ####  STEP 1:                          Install Dependencies                         ####
+          ########################################################################################
+          wget $params http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb    -O X.deb ||
+          wget $params http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb   -O X.deb
+          sudo apt-get update
+          sudo apt-get install ./X.deb
+          ########################################################################################
+          ####  STEP 2:                     Download & Extract FreeBASIC                      ####
+          ########################################################################################
+          wget $params https://users.freebasic-portal.de/freebasicru/user-files/FreeBASIC-1.10.0-linux-x86_64.tar.gz  -O X.tar.gz ||
+          wget $params https://local.doublebyte.ru/static/FreeBASIC-1.10.1-linux-x86_64.tar.gz                        -O X.tar.gz ||
+          wget $params http://downloads.sourceforge.net/fbc/FreeBASIC-1.10.1-linux-x86_64.tar.gz?download             -O X.tar.gz ||
+          wget $params https://github.com/engineer-man/piston/releases/download/pkgs/freebasic-1.9.0.pkg.tar.gz       -O X.tar.gz
+          tar -xf X.tar.gz
+          ########################################################################################
+          ####  STEP 3:                     Add FreeBASIC to System PATH                      ####
+          ########################################################################################
+          fbc_dir=$(ls -1d Free* 2>/dev/null | head -n 1)
+          ln -s $PWD/$fbc_dir/bin/fbc /usr/local/bin/fbc
+          ########################################################################################
+          ####  CONCLUSION:               FreeBASIC Installed in Under 15s                    ####
+          ########################################################################################
+          rm X* && printf '\n\n\n\n' && fbc --version
+
+      - name: ⚙️ Compile the ASP Classic 3.0 (IIS 10.0) script
+        run: |
+          sed -n '/Public/, /Dim t As/p' ciede-2000.bas > driver-asp.bas
+          sed -n '/n = /, /End Function/p' ciede-2000.asp >> driver-asp.bas
+          sed -n '/Sub/,$p' tests/bas/ciede-2000-driver.bas >> driver-asp.bas
+          fbc -O 2 driver-asp.bas
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast -ffast-math -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in ASP and stream to verifier
+        run: ./driver-asp test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

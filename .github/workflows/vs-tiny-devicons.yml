@@ -1,0 +1,67 @@
+name: ΔE2000 against Lua tiny-devicons
+
+on:
+  schedule:
+    - cron: '6 20 11,25 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard verifies the Delta E 2000 with a Neovim plugin in Lua."
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/lua"
+
+jobs:
+  test-delta-e-2000-tiny-devicons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up LuaJIT, LuaRocks and GCC
+        run: |
+          command -v luajit > /dev/null || { sudo apt-get update && sudo apt-get install -y luajit ; }
+          command -v luarocks > /dev/null || { sudo apt-get update && sudo apt-get install -y luarocks ; }
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: 🔧 Install dependencies
+        run: sudo luarocks install luasocket
+
+      - name: 🌈 Credit tiny-devicons-auto-colors.nvim
+        run: |
+          printf "%s\n" \
+            "───[ tiny-devicons-auto-colors.nvim ]──────────────────────────────────────────────" \
+            "       Auto-colors your filetype icons to match your Neovim colorscheme," \
+            "       using ΔE2000 color distance for smart, theme-aware matching." \
+            "" \
+            "       https://github.com/rachartier/tiny-devicons-auto-colors.nvim" \
+            "       MIT License — © 2023 rachartier" \
+            "       Thank you | Merci" \
+            "────────────────────────────────────────────────────────────────────────────────────"
+
+      - name: 📄 Assemble Lua script for CIEDE2000 test
+        run: |
+          printf '%s\n' 'function ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          'local k_l, k_c, k_h = 1.0, 1.0, 1.0;' > file.lua
+          url="https://raw.githubusercontent.com/rachartier/tiny-devicons-auto-colors.nvim/51f548421f8a74680eff27d283c9d5ea6e8d0074/lua/tiny-devicons-auto-colors/lab_utils.lua"
+          wget --timeout=5 --tries=2 -qO- "$url" | sed -n '75,127p'  >> file.lua
+          sed -i 's/utils/math/' file.lua
+          sed -n '84,$p'  >> file.lua < tests/lua/ciede-2000-random.lua
+
+      - name: ⚙️ Compile the CIEDE2000 verification program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast -ffast-math -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: luajit -v && luajit file.lua 10000000 | ./ciede-2000-driver > test-output.txt
+
+      - name: 🔍 Display verification output
+        run: cat test-output.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" test-output.txt && ! grep -q "Successes : 0" test-output.txt; then
+            echo "✔️ Verification successful: All color differences were correctly calculated."
+          else
+            echo "❌ Verification failed: Please check the previous step."
+            exit 1
+          fi
