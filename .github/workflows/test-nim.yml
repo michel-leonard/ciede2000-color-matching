@@ -1,0 +1,61 @@
+name: Nim CIEDE2000 Testing
+
+on:
+  schedule:
+    - cron: '5 3 3,17 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Nim."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/nim"
+  n_csv_lines: 10000000
+
+jobs:
+  test-delta-e-2000-nim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Nim
+        uses: iffy/install-nim@v5
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          version: stable
+
+      - name: 📦 Set up Nim (alternative) and GCC
+        run: |
+          if ! command -v nim > /dev/null; then
+            wget -qO- https://nim-lang.org/choosenim/init.sh | sh -s -- -y
+            echo "$HOME/.nimble/bin" >> $GITHUB_PATH
+          fi
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: 🔧 Set up the Nim testing file
+        run: mv tests/nim/ciede-2000-driver.nim tests/nim/ciede_2000_driver.nim
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Nim and stream to verifier
+        run: nim -v && nim c --opt:speed -r tests/nim/ciede_2000_driver.nim test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
