@@ -1,0 +1,66 @@
+name: SQL CIEDE2000 Testing (PostgreSQL)
+
+on:
+  schedule:
+    - cron: '5 13 3,17 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in SQL."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/sql-postgresql"
+  n_csv_lines: 10000000
+  PGSERVICE: postgres
+
+jobs:
+  test-delta-e-2000-sql-postgresql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up PostgreSQL
+        uses: ikalnytskyi/action-setup-postgres@v7
+
+      - name: ⚙️ Load the CIEDE2000 function into the database
+        run: psql --version && psql -f tests/sql/ciede-2000.pg.sql
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: ⚙️ Load the CSV file into the PostgreSQL database
+        run: |
+          p="double precision"
+          psql -c "CREATE UNLOGGED TABLE colors (l1 $p, a1 $p, b1 $p, l2 $p, a2 $p, b2 $p);"
+          psql -c "\copy colors FROM test-cases.csv WITH (FORMAT csv);"
+          rm test-cases.csv
+
+      - name: 🚀 Run test cases in PostgreSQL and stream to verifier
+        run: |
+          psql -c "\copy (
+            SELECT
+              l1, a1, b1, l2, a2, b2,
+              ciede_2000(l1,a1,b1,l2,a2,b2) AS delta_e
+            FROM colors
+          ) TO STDOUT WITH CSV;" | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
