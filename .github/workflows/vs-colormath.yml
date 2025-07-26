@@ -1,0 +1,79 @@
+name: ΔE2000 against colormath in Python
+
+on:
+  schedule:
+    - cron: '19 11 9,23 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks the Delta E 2000 with the Python colormath module."
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/py"
+
+jobs:
+  test-delta-e-2000-colormath:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Python (alternative)
+        run: command -v python3 > /dev/null || { sudo apt-get update && sudo apt-get install -y python3 ; }
+
+      - name: ⚙️ Ensure that numpy will be available
+        run: python3 -c "import numpy" > /dev/null 2>&1 || python3 -m pip install numpy
+
+      - name: 🔧 Initialize the Python source file (numpy is required)
+        run: |
+          ########################################################################
+          ########       1. Inject the CIEDE2000 native function          ########
+          ########################################################################
+          cat ciede-2000.py > delta-e-2000-vs-colormath.py
+
+          ########################################################################
+          ########      2. Inject the CIEDE2000 colormath function        ########
+          ########################################################################
+          printf '\n%s' 'import numpy' \
+          '' >> delta-e-2000-vs-colormath.py
+
+          url="https://raw.githubusercontent.com/gtaylor/python-colormath"
+          url="$url/6d3261f9c8a2449bdffdf563eb541c8b6846af2d/colormath/color_diff_matrix.py"
+          wget -q -T5 -t1 "$url" -O- | sed -n '115,187p' >> delta-e-2000-vs-colormath.py
+
+          printf '\n%s' '' \
+          'def ciede_2000_colormath(l1, a1, b1, l2, a2, b2):' \
+          '	return delta_e_cie2000([l1, a1, b1], numpy.array([[l2, a2, b2]]))[0]' \
+          '' >> delta-e-2000-vs-colormath.py
+
+          ########################################################################
+          ########       3. Use random L*a*b* colors to display the       ########
+          ########       greatest deviation between implementations       ########
+          ########################################################################
+          printf '\n%s' 'import sys, random' \
+          'n_iterations = int(sys.argv[1])' \
+          'max_diff = 0' \
+          '' \
+          'for i in range(n_iterations):' \
+          '	l1 = random.uniform(0, 100)' \
+          '	a1 = random.uniform(-128, 128)' \
+          '	b1 = random.uniform(-128, 128)' \
+          '	l2 = random.uniform(0, 100)' \
+          '	a2 = random.uniform(-128, 128)' \
+          '	b2 = random.uniform(-128, 128)' \
+          '' \
+          '	delta1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	delta2 = ciede_2000_colormath(l1, a1, b1, l2, a2, b2)' \
+          '' \
+          '	diff = abs(delta1 - delta2)' \
+          '	if diff > max_diff:' \
+          '		max_diff = diff' \
+          '		print(f"Greatest deviation of {max_diff:.2e} at iteration {i}.", flush=True)' \
+          'sys.exit(0 if max_diff < 1E-10 else 1)' \
+          '' >> delta-e-2000-vs-colormath.py
+
+      - name: ☁ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-colormath.py || true
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Python
+        run: python3 delta-e-2000-vs-colormath.py 1000000
