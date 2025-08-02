@@ -1,0 +1,72 @@
+name: SQL CIEDE2000 Testing (MariaDB)
+
+# When this workflow was tested, its execution produced a success in 411 seconds.
+
+on:
+  schedule:
+    - cron: '9 19 4,18 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in SQL."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/sql-mariadb"
+  n_csv_lines: 10000000
+
+jobs:
+  test-delta-e-2000-sql-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up MariaDB
+        uses: ankane/setup-mariadb@v1
+        with:
+          mariadb-version: 11.4
+          database: my-demo
+
+      - name: ⚙️ Load the CIEDE2000 function into the MariaDB database
+        run: /usr/bin/mariadb -V && /usr/bin/mariadb -D my-demo < ciede-2000.sql
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: ⚙️ Load CSV file into database
+        run: |
+          m="/usr/bin/mariadb"
+          o="-D my-demo -e"
+          p="Double"
+          $m $o "CREATE TABLE colors (L1 $p, a1 $p, b1 $p, L2 $p, a2 $p, b2 $p) ENGINE=MyISAM;"
+          $m --local-infile=1 $o "
+            LOAD DATA LOCAL INFILE 'test-cases.csv' INTO TABLE colors
+            FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'
+            (L1,a1,b1,L2,a2,b2);"
+          rm test-cases.csv
+
+      - name: 🚀 Run test cases in MariaDB and stream to verifier
+        run: |
+          e="/usr/bin/mariadb -D my-demo -B -N -e "
+          $e "SELECT CONCAT_WS(',', L1,a1,b1,L2,a2,b2, ciede_2000(L1,a1,b1,L2,a2,b2)) FROM colors;" \
+          | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

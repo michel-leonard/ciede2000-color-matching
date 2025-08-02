@@ -1,0 +1,54 @@
+name: PowerShell CIEDE2000 Testing
+
+# When this workflow was tested, its execution produced a success in 149 seconds.
+
+on:
+  schedule:
+    - cron: '24 22 2,16 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in PowerShell."
+  input_file: "test-cases.csv contains lines like 74,46.4,114.1,71.6,11,82 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 74,46.4,114.1,71.6,11,82,15.3404963375093 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/ps1"
+  n_csv_lines: 1000000
+
+jobs:
+  test-delta-e-2000-ps1:
+    runs-on: windows-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Display System Information
+        run: |
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber
+          get-host
+          $PSVersionTable
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver.exe -lm
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: |
+          $seed = get-date -UFormat %Y%V
+          ./ciede-2000-driver.exe --rand-seed "$seed" --generate "${env:n_csv_lines}" > test-cases.csv
+
+      - name: 🚀 Run test cases in PowerShell and stream to verifier
+        run: . ./tests/ps1/ciede-2000-driver.ps1 test-cases.csv | ./ciede-2000-driver.exe > summary.txt
+
+      - name: 🔍 Display verification output
+        run: Get-Content summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          $file = Get-Content summary.txt -Raw
+          if (($file -match "Errors : 0") -and ($file -match "Successes : ${env:n_csv_lines}")) {
+              "✔️ Verification successful: all ${env:n_csv_lines} color differences were correctly calculated."
+          } else {
+              "❌ Verification failed. See above for details."
+              exit 1
+          }
