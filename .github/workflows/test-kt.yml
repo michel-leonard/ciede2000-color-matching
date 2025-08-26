@@ -1,0 +1,69 @@
+name: Kotlin CIEDE2000 Testing
+
+# When this workflow was tested, its execution produced a success in 54 seconds.
+
+on:
+  schedule:
+    - cron: '7 3 10,24 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Kotlin"
+  input_file: "test-cases.csv contains lines like 54.7,-5.8,61,75,5,18 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 54.7,-5.8,61,75,5,18,24.400190992805030066485213079617 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/kt"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-kt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Kotlin and Java
+        run: |
+          if ! command -v kotlinc > /dev/null; then
+            wget --timeout=5 --tries=3 -qO- https://get.sdkman.io | bash
+            printf '%s\n' \
+              "sdkman_auto_answer=true" \
+              "sdkman_auto_selfupdate=true" > "$HOME/.sdkman/etc/config"
+            source "$HOME/.sdkman/bin/sdkman-init.sh"
+            sdk install kotlin
+          fi
+          command -v java > /dev/null || { sudo apt-get update && sudo apt-get install -y default-jdk; }
+
+      - name: ⚙️ Compile Kotlin file
+        run: |
+          kotlinc -version
+          cp tests/kt/ciede-2000-driver.kt exec.kt
+          kotlinc exec.kt -include-runtime -d exec.jar
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Kotlin and stream to verifier
+        run: java -version && java -jar exec.jar test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

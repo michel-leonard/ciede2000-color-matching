@@ -1,0 +1,53 @@
+name: Racket CIEDE2000 Testing
+
+# When this workflow was tested, its execution produced a success in 176 seconds.
+
+on:
+  schedule:
+    - cron: '26 21 12,26 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Racket"
+  input_file: "test-cases.csv contains lines like 56.5,-3,63.5,55,31,85 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 56.5,-3,63.5,55,31,85,18.923845819563011268806252236297 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/rkt"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-racket:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Racket and GCC
+        run: |
+          command -v racket > /dev/null || { sudo apt-get update && sudo apt-get install -y racket ; }
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Racket and stream to verifier
+        run: racket --version && racket tests/rkt/ciede-2000-driver.rkt test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

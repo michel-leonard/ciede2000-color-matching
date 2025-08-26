@@ -1,0 +1,53 @@
+name: Python CIEDE2000 Testing
+
+# When this workflow was tested, its execution produced a success in 78 seconds.
+
+on:
+  schedule:
+    - cron: '5 21 3,17 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Python"
+  input_file: "test-cases.csv contains lines like 82,-8,75,79.2,28.8,90 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 82,-8,75,79.2,28.8,90,20.398324406677155795881643679494 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/py"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-py:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Python (alternative) and GCC
+        run: |
+          command -v python3 > /dev/null || { sudo apt-get update && sudo apt-get install -y python3 ; }
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Python and stream to verifier
+        run: python3 --version && python3 tests/py/ciede-2000-driver.py test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

@@ -1,0 +1,82 @@
+name: bc CIEDE2000 Testing (standard prec.)
+
+# When this workflow was tested, its execution produced a success in 191 seconds.
+
+on:
+  schedule:
+    - cron: '5 13 12,26 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in bc"
+  input_file: "test-cases.csv contains lines like 67.1,124,-9,92,98,7.1 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 67.1,124,-9,92,98,7.1,18.532434905887879747988646467241 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/bc"
+  n_csv_lines: 1000000
+
+jobs:
+  test-implementation-de00-bc-standard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up bc and GCC
+        run: |
+          command -v bc > /dev/null || { sudo apt-get update && sudo apt-get install -y bc ; }
+          command -v gcc > /dev/null || { sudo apt-get update && sudo apt-get install -y gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 💻 Set the number of CPUs in the environment variables
+        run: |
+          cpu_count=$(nproc)
+          cpu_count=$(( $cpu_count < 8 ? $cpu_count : 8 ))
+          echo "cpu_count=$cpu_count" >> $GITHUB_ENV
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines | split -u -d -l $(( 8 + $n_csv_lines / $cpu_count )) - X
+
+      - name: 🔧 Prepares standard-precision ΔE2000 results with bc (Basic Calculator)
+        run: |
+          bc --version
+          # Prevent line breaks in bc output.
+          export BC_LINE_LENGTH=0
+          for ((i = $cpu_count; 0 <= --i ;)); do
+              awk -F ',' '                                                   \
+              BEGIN {                                                        \
+                  # Includes the ciede-2000.bc file.                         \
+                  while ((getline line < "ciede-2000.bc") > 0) print line;   \
+              } {                                                            \
+                  # Convert CSV lines into bc input format.                  \
+                  gsub(/[eE]/, "*10^", $0);                                  \
+                  printf("ciede_2000(%s)\n", $0);                            \
+              }' X0$i | bc -ql > Y0$i &
+          done
+          wait
+          for ((i = $cpu_count; 0 <= --i ;)); do
+            paste -d ',' X0$i Y0$i >> bc-answer.csv
+          done
+
+      # This tolerance is useful in those rare cases where bc (default scale) becomes too imprecise.
+
+      - name: 🚀 Check that C99 calculations matches bc's
+        run: cat bc-answer.csv | ./ciede-2000-driver --tolerance 1e-7 -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
