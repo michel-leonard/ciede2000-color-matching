@@ -1,0 +1,51 @@
+name: Swift CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on multiple occasions and completed successfully in 64 seconds.
+
+on:
+  schedule:
+    - cron: '33 2 13,27 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Swift"
+  input_file: "test-cases.csv contains lines like 27,98,7.8,0.4,86,-18 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 27,98,7.8,0.4,86,-18,19.611698306262480467696162438333 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/swift"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-swift:
+    runs-on: macos-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 With each step we’ll start at the root of the reopsitory
+        uses: actions/checkout@v5
+
+      - name: ⚙️ Compile Swift test file
+        run: swiftc --version && swiftc -Ounchecked tests/swift/ciede-2000-driver.swift -o ciede-2000-tests
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: clang --version && clang -Wall -pedantic -O2 tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Swift and stream to verifier
+        run: ./ciede-2000-tests test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
