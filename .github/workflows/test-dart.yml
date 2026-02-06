@@ -1,0 +1,66 @@
+name: Dart CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 58 seconds.
+
+on:
+  schedule:
+    - cron: '57 3 25 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Dart"
+  input_file: "test-cases.csv contains lines like 90,5,87,90.7,-5.2,94 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 90,5,87,90.7,-5.2,94,5.731305569318026645912728018659 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/dart"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-dart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Dart and GCC
+        run: |
+          if ! command -v dart > /dev/null; then
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=2 https://dl-ssl.google.com/linux/linux_signing_key.pub -O- | sudo gpg --dearmor -o /usr/share/keyrings/dart.gpg
+            echo "deb [signed-by=/usr/share/keyrings/dart.gpg]" "https://storage.googleapis.com/download.dartlang.org/linux/debian stable main" |
+            sudo tee /etc/apt/sources.list.d/dart_stable.list
+            sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes dart
+            # sudo ln -s /usr/lib/dart/bin/dart /usr/local/bin/dart
+            echo "/usr/lib/dart/bin" >> $GITHUB_PATH
+          fi
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Dart and stream to verifier
+        run: dart --version && dart tests/dart/ciede-2000-driver.dart test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

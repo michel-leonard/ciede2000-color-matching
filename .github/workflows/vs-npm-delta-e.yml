@@ -1,0 +1,77 @@
+name: ΔE2000 against npm/delta-e in JavaScript
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 89 seconds.
+
+on:
+  schedule:
+    - cron: '55 2 23 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of nmp delta-e in JavaScript"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/js"
+
+jobs:
+  test-implementation-de00-npm-delta-e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Node
+        run: command -v node > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes nodejs; }
+
+      - name: 🔧 Initialize the JavaScript source file
+        run: |
+          ####################################################################
+          ######       1. Inject the interoperable function in JS       ######
+          ####################################################################
+          url="https://raw.githubusercontent.com/zschuessler/DeltaE"
+          url="$url/982e2e31ab098131b043bf80fbe843e6f6024e0c/src/dE00.js"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '29,311p' > ciede-2000-vs-delta-e.js
+
+          printf '\n%s' '' \
+          'const ciede_2000_other = (l1, a1, b1, l2, a2, b2) =>' \
+          '	(new dE00({L: l1, A: a1, B: b1}, {L: l2, A: a2, B: b2})).getDeltaE()' \
+          '' >> ciede-2000-vs-delta-e.js
+
+          ####################################################################
+          ######         2. Inject the native function in JS            ######
+          ####################################################################
+          cat ciede-2000.js >> ciede-2000-vs-delta-e.js
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '\n%s' '' \
+          'const n_iterations = parseInt(process.argv[2], 10)' \
+          'let max_err = 0.0' \
+          'let l1 = Math.random() * 100.0, a1 = Math.random() * 256.0 - 128.0, b1 = Math.random() * 256.0 - 128.0' \
+          'for (let i = 0; i < n_iterations; ++i) {' \
+          '	let l2 = Math.random() * 100.0, a2 = Math.random() * 256.0 - 128.0, b2 = Math.random() * 256.0 - 128.0' \
+          '	const d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	const d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '	const err = Math.abs(d2 - d1)' \
+          '	if (max_err < err) {' \
+          '		max_err = err' \
+          '		console.log(`Greatest deviation of ${err.toExponential(2)} in ΔE2000 at iteration ${i + 1}.`)' \
+          '	}' \
+          '	l1 = l2, a1 = a2, b1 = b2' \
+          '}' \
+          'process.exit(max_err < 1E-10 ? 0 : 1)' \
+          '' >> ciede-2000-vs-delta-e.js
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-delta-e.js || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in JavaScript
+        run: node --version && node ciede-2000-vs-delta-e.js 100000000

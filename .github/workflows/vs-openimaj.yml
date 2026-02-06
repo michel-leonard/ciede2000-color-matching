@@ -1,0 +1,82 @@
+name: ΔE2000 against OpenIMAJ in Java
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 55 seconds.
+
+on:
+  schedule:
+    - cron: '0 4 9 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of OpenIMAJ in Java"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/java"
+
+jobs:
+  test-implementation-de00-openimaj:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Java (alternative)
+        run: command -v javac > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes default-jdk ; }
+
+      - name: 🔧 Initialize the Java source files with OpenIMAJ
+        run: |
+          #################################################################################
+          ##############            1. Inject the native function            ##############
+          #################################################################################
+          printf '%s\n' '' \
+          'public class CIEDE2000_VS_OpenIMAJ {' \
+          '' > CIEDE2000_VS_OpenIMAJ.java
+
+          cat ciede-2000.java >> CIEDE2000_VS_OpenIMAJ.java
+
+          #################################################################################
+          ##############           2. Inject the OpenIMAJ function           ##############
+          #################################################################################
+          url="https://raw.githubusercontent.com/openimaj/openimaj/545969f7a99c13bb5bd02c0a30f55013e4abca72"
+          url="$url/image/image-processing/src/main/java/org/openimaj/image/analysis/colour/CIEDE2000.java"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '85,130p' >> CIEDE2000_VS_OpenIMAJ.java
+          sed -i 's/calculateDeltaE/ciede_2000_other/' CIEDE2000_VS_OpenIMAJ.java
+
+          #################################################################################
+          ##############            3. Perform a ΔE2000 comparison           ##############
+          #################################################################################
+          printf '%s\n' '' \
+          '	public static void main(String[] args) {' \
+          '		long n_iterations = Long.parseLong(args[0]);' \
+          '		double l1 = Math.random() * 100.0, a1 = Math.random() * 256.0 - 128.0, b1 = Math.random() * 256.0 - 128.0;' \
+          '		double max_err = 0.0;' \
+          '		for (long i = 0; i < n_iterations; ++i) {' \
+          '			final double l2 = Math.random() * 100.0, a2 = Math.random() * 256.0 - 128.0, b2 = Math.random() * 256.0 - 128.0;' \
+          '			final double d1 = ciede_2000(l1, a1, b1, l2, a2, b2);' \
+          '			final double d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2);' \
+          '			final double err = Math.abs(d2 - d1);' \
+          '			if (max_err < err) {' \
+          '				max_err = err;' \
+          '				System.out.format("Greatest deviation of %.2e in color differences at iteration %d.\n", err, i + 1);' \
+          '			}' \
+          '			l1 = l2; a1 = a2; b1 = b2;' \
+          '		}' \
+          '		System.exit(max_err < 1E-10 ? 0 : 1);' \
+          '	}' \
+          '}' \
+          '' >> CIEDE2000_VS_OpenIMAJ.java
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@CIEDE2000_VS_OpenIMAJ.java || true
+
+      - name: ⚙️ Compile the Java file
+        run: javac CIEDE2000_VS_OpenIMAJ.java
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Java
+        run: java CIEDE2000_VS_OpenIMAJ 65000000

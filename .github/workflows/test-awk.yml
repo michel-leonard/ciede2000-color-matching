@@ -1,0 +1,63 @@
+name: AWK CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 76 seconds.
+
+on:
+  schedule:
+    - cron: '2 4 26 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in AWK"
+  input_file: "test-cases.csv contains lines like 60.1,-3,82,47,6,75.3 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 60.1,-3,82,47,6,75.3,13.821100758195747867697407458718 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/awk"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-awk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 🛠️ Make the AWK script directly executable (bonus)
+        run: |
+          printf '%s\n' '#!/usr/bin/awk -f' > /usr/local/bin/ciede_2000
+          cat ciede-2000.awk >> /usr/local/bin/ciede_2000
+          chmod 0755 /usr/local/bin/ciede_2000
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in AWK and stream to verifier
+        run: awk --version && ciede_2000 < test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

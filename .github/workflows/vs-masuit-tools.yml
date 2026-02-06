@@ -1,0 +1,108 @@
+name: ΔE2000 against Masuit.Tools in C#
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 59 seconds.
+
+on:
+  schedule:
+    - cron: '0 5 15 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Masuit.Tools in C#"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/cs"
+
+jobs:
+  test-implementation-de00-masuit-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up dotnet
+        run: command -v dotnet > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes dotnet-sdk-8.0 ; }
+
+      - name: 🔧 Allow a single .cs file to be executed
+        run: dotnet --version && dotnet tool install -g dotnet-script
+
+      - name: 🔧 Initialize the C# source file
+        run: |
+          ####################################################################
+          ######       1. Inject the interoperable function in C#       ######
+          ####################################################################
+          printf '\n%s' '' \
+          'using System;' \
+          'class Program {' \
+          ' static double ciede_2000_other(double l1, double a1, double b1, double l2, double a2, double b2) {' \
+          '  const double kL = 1.0;' \
+          '  const double kC = 1.0;' \
+          '  const double kH = 1.0;' \
+          '' > ciede-2000-vs-masuit-tools.cs
+
+          url="https://raw.githubusercontent.com/ldqk/Masuit.Tools"
+          url="$url/540d59fa352cb11f13b09f8fca116eceab593389/Masuit.Tools.Abstractions/Media/ColorDeltaE.cs"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '122,186p' >> ciede-2000-vs-masuit-tools.cs
+
+          ####################################################################
+          ######          2. Inject the native function in C#           ######
+          ####################################################################
+          awk 'BEGIN { skip = -1 } {
+            if ($0 ~ /Sharma.s formulation/) { skip = 2 }
+            else if (0 < skip) { skip-- }
+            else if (skip == 0) { skip--; sub(/\/\//, ""); print }
+            else {  print }
+          }' ciede-2000.cs >> ciede-2000-vs-masuit-tools.cs
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '\n%s' '' \
+          ' public static void exec(string arg) {' \
+          '  if (!int.TryParse(arg, out int n_iterations)) {' \
+          '   Console.WriteLine("Please specify the number of iterations.");' \
+          '   return;' \
+          '  }' \
+          '' \
+          '  double max_err = 0.0;' \
+          '	 Random rand = new Random();' \
+          '' \
+          '	 double l1 = rand.NextDouble() * 100.0;' \
+          '	 double a1 = rand.NextDouble() * 255.0 - 128.0;' \
+          '	 double b1 = rand.NextDouble() * 255.0 - 128.0;' \
+          '' \
+          '  for (int i = 0; i < n_iterations; i++) {' \
+          '   double l2 = rand.NextDouble() * 100.0;' \
+          '   double a2 = rand.NextDouble() * 255.0 - 128.0;' \
+          '   double b2 = rand.NextDouble() * 255.0 - 128.0;' \
+          '' \
+          '   double d1 = ciede_2000(l1, a1, b1, l2, a2, b2);' \
+          '   double d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2);' \
+          '   double err = Math.Abs(d2 - d1);' \
+          '' \
+          '   if (max_err < err) {' \
+          '    max_err = err;' \
+          '    Console.WriteLine($"Greatest deviation of {err:E2} in ΔE2000 at iteration {i + 1}.");' \
+          '    Console.Out.Flush();' \
+          '   }' \
+          '' \
+          '   (l1, a1, b1) = (l2, a2, b2);' \
+          '  }' \
+          '  Environment.Exit(max_err < 1E-10 ? 0 : 1);' \
+          ' }' \
+          '}' \
+          'Program.exec(Args[0])' \
+          '' >> ciede-2000-vs-masuit-tools.cs
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-masuit-tools.cs || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in C#
+        run: dotnet script ciede-2000-vs-masuit-tools.cs 50000000

@@ -1,0 +1,97 @@
+name: ΔE2000 against tiny-devicons in Lua
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 62 seconds.
+
+on:
+  schedule:
+    - cron: '50 3 27 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of tiny-devicons in Lua"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/lua"
+
+jobs:
+  test-implementation-de00-tiny-devicons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up LuaJIT
+        run: command -v luajit > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes luajit ; }
+
+      - name: 🌈 Credit tiny-devicons-auto-colors.nvim
+        run: |
+          printf "%s\n" \
+            "───[ tiny-devicons-auto-colors.nvim ]──────────────────────────────────────────────" \
+            "       Auto-colors your filetype icons to match your Neovim colorscheme," \
+            "       using ΔE2000 color distance for smart, theme-aware matching." \
+            "" \
+            "       https://github.com/rachartier/tiny-devicons-auto-colors.nvim" \
+            "       MIT License — © 2023 rachartier" \
+            "       Thank you | Merci" \
+            "────────────────────────────────────────────────────────────────────────────────────"
+
+      - name: 📄 Initialize the Lua script
+        run: |
+          ####################################################################
+          ######      1. Inject the interoperable function in Lua       ######
+          ####################################################################
+          printf '\n%s' 'function ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '	local k_l, k_c, k_h = 1.0, 1.0, 1.0' \
+          '' >> ciede-2000-vs-tiny-devicons-auto-colors.lua
+
+          url="https://raw.githubusercontent.com/rachartier/tiny-devicons-auto-colors.nvim"
+          url="$url/51f548421f8a74680eff27d283c9d5ea6e8d0074/lua/tiny-devicons-auto-colors/lab_utils.lua"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '75,127p' >> ciede-2000-vs-tiny-devicons-auto-colors.lua
+
+          sed -i 's/utils/math/' ciede-2000-vs-tiny-devicons-auto-colors.lua
+
+          ####################################################################
+          ######        2. Inject the native function in Lua            ######
+          ####################################################################
+          cat ciede-2000.lua >> ciede-2000-vs-tiny-devicons-auto-colors.lua
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          SEED=$(date +%s)
+          printf '\n%s' '' \
+          'io.stdout:setvbuf("no")' \
+          'local n_iterations = tonumber(arg[1])' \
+          'math.randomseed('$SEED')' \
+          'local max_err = 0.0' \
+          'local l1 = math.random() * 100.0' \
+          'local a1 = math.random() * 256.0 - 128.0' \
+          'local b1 = math.random() * 256.0 - 128.0' \
+          'for i = 1, n_iterations do' \
+          '	local l2 = math.random() * 100.0' \
+          '	local a2 = math.random() * 256.0 - 128.0' \
+          '	local b2 = math.random() * 256.0 - 128.0' \
+          '	local d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	local d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '	local err = math.abs(d2 - d1)' \
+          '	if err > max_err then' \
+          '		max_err = err' \
+          '		print(string.format("Greatest deviation of %.2e in ΔE2000 at iteration %d.", err, i))' \
+          '	end' \
+          '	l1, a1, b1 = l2, a2, b2' \
+          'end' \
+          'os.exit(max_err < 1e-10 and 0 or 1)' \
+          '' >> ciede-2000-vs-tiny-devicons-auto-colors.lua
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-tiny-devicons-auto-colors.lua || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Lua
+        run: luajit -v && luajit ciede-2000-vs-tiny-devicons-auto-colors.lua 100000000
