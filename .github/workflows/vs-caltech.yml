@@ -1,0 +1,81 @@
+name: ΔE2000 against Caltech in Matlab
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 91 seconds.
+
+on:
+  schedule:
+    - cron: '7 4 1 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Wagenaar Lab in MATLAB"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/m"
+
+jobs:
+  test-implementation-de00-caltech:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up GNU Octave
+        run: command -v octave > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes octave ; }
+
+      - name: 🔧 Initialize the Matlab source file
+        run: |
+          ####################################################################
+          ######           1. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '\n%s' 'function ciede_2000_vs_caltech(varargin)' \
+          '	n_iterations = varargin{1};' \
+          '	max_err = 0.0;' \
+          '	l1 = rand() * 100.0;' \
+          '	a1 = rand() * 256.0 - 128.0;' \
+          '	b1 = rand() * 256.0 - 128.0;' \
+          '	for i = 1:n_iterations' \
+          '		l2 = rand() * 100.0;' \
+          '		a2 = rand() * 256.0 - 128.0;' \
+          '		b2 = rand() * 256.0 - 128.0;' \
+          '		d1 = ciede_2000_other([l1, a1, b1], [l2, a2, b2]);' \
+          '		d2 = ciede_2000_classic(l1, a1, b1, l2, a2, b2);' \
+          '		err = abs(d2 - d1);' \
+          '		if max_err < err' \
+          '			max_err = err;' \
+          '			fprintf("Greatest deviation of %.2e in ΔE2000 at iteration %d.\n", err, i);' \
+          '		end' \
+          '		l1 = l2; a1 = a2; b1 = b2;' \
+          '	end' \
+          '	quit(1E-10 < max_err || n_iterations < 50)' \
+          'end' \
+          '' > ciede_2000_vs_caltech.m
+
+          ####################################################################
+          ######    2. Inject the interoperable function in MATLAB      ######
+          ####################################################################
+          url="https://raw.githubusercontent.com/wagenadl/octave-wagenaarlab"
+          url="$url/51bb1e0b4144676ab34dd8f16a760322f6fb5004/colorx/cielabdist.m"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed 's/cielabdist/ciede_2000_other/' >> ciede_2000_vs_caltech.m
+
+          printf '\n%s' '' \
+          'end' \
+          '' >> ciede_2000_vs_caltech.m
+
+          ####################################################################
+          ######      3. Inject the native function in MATLAB           ######
+          ####################################################################
+          cat ciede-2000.m >> ciede_2000_vs_caltech.m
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede_2000_vs_caltech.m || true
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Matlab
+        run: octave --version && octave --quiet --eval 'ciede_2000_vs_caltech(250000)'

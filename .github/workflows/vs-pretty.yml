@@ -1,0 +1,91 @@
+name: ΔE2000 against pretty in Swift
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 70 seconds.
+
+on:
+  schedule:
+    - cron: '14 4 17 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of octree/pretty in Swift"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/swift"
+
+jobs:
+  test-implementation-de00-pretty:
+    runs-on: macos-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 🔧 Initialize the Swift source file
+        run: |
+          ####################################################################
+          ######       1. Inject the native function in Swift           ######
+          ####################################################################
+          cat ciede-2000.swift > ciede-2000-vs-pretty.swift
+
+          ####################################################################
+          ######    2. Inject the interoperable function in Swift       ######
+          ####################################################################
+          printf '%s\n' '' \
+          'func GLKMathDegreesToRadians( _ a: Double) -> Double { return a * Double.pi / 180.0; }' \
+          'func GLKMathRadiansToDegrees( _ a: Double) -> Double { return a / Double.pi * 180.0; }' \
+          'func C(_ a: Double, b: Double) -> Double { return sqrt(pow(a, 2) + pow(b, 2)); }' \
+          'func ciede_2000_other(l_1: Double, a_1: Double, b_1: Double, l_2: Double, a_2: Double, b_2: Double) -> Double {' \
+          '	let (L1, a1, b1) = (l_1, a_1, b_1)' \
+          '	let (L2, a2, b2) = (l_2, a_2, b_2)' \
+          '	let (kL, kC, kH) = (1.0, 1.0, 1.0)' \
+          '' >> ciede-2000-vs-pretty.swift
+
+          url="https://raw.githubusercontent.com/octree/pretty"
+          url="$url/c5012b2c990337b2f503b3ee343a507f94e99cd4/Pretty/Utils/ColorDifference.swift"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '34,99p' |
+          sed 's/Float/Double/g;s/return pow/let res = pow/' >> ciede-2000-vs-pretty.swift
+
+          printf '%s\n' '' \
+          '	return sqrt(res)' \
+          '}' \
+          '' >> ciede-2000-vs-pretty.swift
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          'setbuf(__stdoutp, nil)' \
+          'let argument = CommandLine.arguments.dropFirst().first' \
+          'let n_iterations = Int(argument ?? "") ?? 10000' \
+          'var max_err: Double = 0.0' \
+          'var l1 = Double.random(in: 0..<100.0)' \
+          'var a1 = Double.random(in: -128.0..<128.0)' \
+          'var b1 = Double.random(in: -128.0..<128.0)' \
+          'for i in 0..<n_iterations {' \
+          '	let l2 = Double.random(in: 0..<100.0)' \
+          '	let a2 = Double.random(in: -128.0..<128.0)' \
+          '	let b2 = Double.random(in: -128.0..<128.0)' \
+          '	let d1 = ciede_2000(l_1: l1, a_1: a1, b_1: b1, l_2: l2, a_2: a2, b_2: b2)' \
+          '	let d2 = ciede_2000_other(l_1: l1, a_1: a1, b_1: b1, l_2: l2, a_2: a2, b_2: b2)' \
+          '	let err = abs(d2 - d1)' \
+          '	if max_err < err {' \
+          '		max_err = err' \
+          '		let err_str = String(format: "%.2e", err)' \
+          '		print("Greatest deviation of \(err_str) in ΔE2000 at iteration \(i + 1).")' \
+          '	}' \
+          '	l1 = l2' \
+          '	a1 = a2' \
+          '	b1 = b2' \
+          '}' \
+          'exit(max_err < 1E-10 ? 0 : 1)' \
+          '' >> ciede-2000-vs-pretty.swift
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-pretty.swift || true
+
+      - name: ⚙️ Compile Swift test file
+        run: swiftc --version && swiftc -Ounchecked ciede-2000-vs-pretty.swift -o ciede-2000-vs-pretty
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Swift
+        run: ./ciede-2000-vs-pretty 100000000

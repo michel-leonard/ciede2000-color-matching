@@ -1,0 +1,79 @@
+name: CIEDE 2000 32/64 bits identity
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 55 seconds.
+
+on:
+  schedule:
+    - cron: '52 3 4 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard verifies 32-bit and 64-bit ΔE2000 implementations in C and C++"
+  process: "The program internally verifies that the languages ​​produce identical results and displays a summary"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/cpp"
+
+jobs:
+  test-implementation-de00-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up g++
+        run:  command -v g++ > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes g++ ; }
+
+      - name: 🔧 Initialize the C99 and C++ source files
+        run: |
+          dir="tests/cpp"
+          sed 's/ciede_2000/ciede_2000_c_double/' ciede-2000.c > $dir/prelude.cpp
+          sed 's/ciede_2000/ciede_2000_c_float/' tests/c/ciede-2000-single-precision.c >> $dir/prelude.cpp
+          sed 's/ciede_2000/ciede_2000_cpp/' ciede-2000.cpp >> $dir/prelude.cpp
+
+      - name: ℹ️ Initializes the summary.txt file with details on hardware and system
+        run: |
+          . /etc/os-release
+          echo "=================================================
+          =============== System Signature ================
+          =================================================
+          Hostname            :" $(cat /proc/sys/kernel/hostname) "
+          Linux Kernel        :" $(cat /proc/sys/kernel/ostype) $(cat /proc/sys/kernel/osrelease) "
+          Linux Distribution  : $PRETTY_NAME ($UBUNTU_CODENAME)
+          Architecture        :" $(uname -m) "
+          CPU                 :" $(grep -m1 'model name' /proc/cpuinfo | cut -d ':' -f2 | sed 's/^ //') "
+          Cores               :" $(nproc) "
+          Memory              :" $(awk '/MemTotal/ {printf "%.1f GB", $2/1024/1024}' /proc/meminfo) "
+
+          =================================================" > summary.txt
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@tests/cpp/prelude.cpp || true
+
+      - name: ⚙️ Compile the CIEDE2000 testing program in C++
+        run: g++ --version && g++ -std=c++14 -Wall -Wextra -Wpedantic -Ofast -o ciede-2000-identity tests/cpp/ciede-2000-identity.cpp
+
+      - name: 🚀 Run tests and confirm that C and C++ implementations are equals
+        run: cat summary.txt && ./ciede-2000-identity 80000000 2>&1 | tee -a summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "PASS : Both implementations" summary.txt; then
+            echo "✔️ Verification successful: all color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
+
+      - name: 🔼 Upload summary.txt as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary
+          path: summary.txt
+          retention-days: 60

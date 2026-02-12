@@ -1,0 +1,92 @@
+name: ΔE2000 against colorscore in Ruby
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 55 seconds.
+
+on:
+  schedule:
+    - cron: '37 2 6 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of colorscore in Ruby"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/rb"
+
+jobs:
+  test-implementation-de00-colorscore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Ruby (alternative)
+        run: command -v ruby > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes ruby-full ; }
+
+      - name: 🔧 Initialize the Ruby source file
+        run: |
+          #################################################################################
+          ##############          1. Inject the colorscore function          ##############
+          #################################################################################
+          printf '%s\n' '' \
+          'def radians(degrees); degrees * Math::PI / 180; end' \
+          'def degrees(radians); radians * 180 / Math::PI; end' \
+          'def ciede_2000_colorscore(l1, a1, b1, l2, a2, b2)' \
+          '  kl = kc = kh = 1' \
+          '' > delta-e-2000-vs-colorscore.rb
+
+          url="https://raw.githubusercontent.com/quadule/colorscore"
+          url="$url/32dad8ee5d7500f01208bc9262e8d4d4f3248642/lib/colorscore/metrics.rb"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '19,68p' >>  delta-e-2000-vs-colorscore.rb
+
+          #################################################################################
+          ##############            2. Inject the native function            ##############
+          #################################################################################
+          cat ciede-2000.rb >> delta-e-2000-vs-colorscore.rb
+
+          #################################################################################
+          ##############            3. Perform a ΔE2000 comparison           ##############
+          #################################################################################
+          printf '%s\n' '' \
+          'if ARGV.length != 1' \
+          '	puts "Usage: #{$0} <n_iterations>"' \
+          '	exit 2' \
+          'end' \
+          '' \
+          '$stdout.sync = true' \
+          'max_err = 0.0' \
+          '' \
+          'ARGV[0].to_i.times do |i|' \
+          '	l1 = rand * 100.0' \
+          '	a1 = rand(-128.0..128.0)' \
+          '	b1 = rand(-128.0..128.0)' \
+          '	l2 = rand * 100.0' \
+          '	a2 = rand(-128.0..128.0)' \
+          '	b2 = rand(-128.0..128.0)' \
+          '' \
+          '	res1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	res2 = ciede_2000_colorscore(l1, a1, b1, l2, a2, b2)' \
+          '' \
+          '	err = (res1 - res2).abs' \
+          '' \
+          '	if max_err < err' \
+          '		max_err = err' \
+          '		puts "Greatest deviation in ΔE2000 of #{"%.3g" % err} at iteration #{i+1}."' \
+          '	end' \
+          '' \
+          'end' \
+          '' \
+          'exit(max_err < 1e-10 ? 0 : 1)' \
+          '' >> delta-e-2000-vs-colorscore.rb
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-colorscore.rb || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Ruby
+        run: ruby --yjit delta-e-2000-vs-colorscore.rb 10000000

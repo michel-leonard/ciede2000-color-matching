@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="description" content="A generator that shows RGB color pairs sharing a given ΔE2000 value (±0.05).">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Colors with a Given ΔE2000 Generator</title>
+	<style>
+		:root {
+			--controls-width: 680px;
+			--samples-width: 900px;
+		}
+
+		body {
+			font-family: sans-serif;
+			margin: 0;
+			background: #f4f4f4;
+			color: #333;
+			background-image: url('data:image/svg+xml,%3Csvg 	xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\' viewBox=\'0 0 200 200\'%3E%3Cdefs%3E%3Cpattern id=\'textPattern\' patternUnits=\'userSpaceOnUse\' width=\'200\' height=\'200\'%3E%3Ctext x=\'120\' y=\'50\' font-size=\'20\' fill=\'%23d5d5d5\' transform=\'rotate(40 40 40)\' text-anchor=\'middle\' font-family=\'Arial, sans-serif\'%3Ewith ΔE 2000 ...%3C/text%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'url(%23textPattern)\' /%3E%3C/svg%3E');
+		}
+
+		a, a:visited, a:active {
+			color: blue;
+			text-decoration: none;
+			transition: color 0.2s ease;
+			font-weight: 700;
+			cursor: pointer;
+		}
+
+		a:hover {
+			color: darkblue;
+			text-decoration: none;
+		}
+
+		h1 {
+			text-align: center;
+			margin-bottom: 0.5rem;
+		}
+
+		p.intro {
+			text-align: center;
+			margin: 0 auto 1rem auto;
+		}
+
+		.deltaE-display {
+			font-size: 2rem;
+			font-weight: bold;
+			text-align: center;
+			margin-bottom: 1rem;
+			color:firebrick;
+		}
+
+		.controls {
+			background: #fff;
+			border-radius: 8px;
+			padding: 1rem;
+			max-width: var(--controls-width);
+			margin: 0 auto 2rem auto;
+			box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+		}
+
+		.controls > * {
+			margin-bottom: 1rem;
+		}
+
+		#presets {
+			list-style: none;
+			display: flex;
+			justify-content: space-around;
+			padding: 0;
+			margin: 0 auto 1.5rem;
+		}
+
+		#presets > li {
+			color: #aaa;
+			text-decoration: none;
+			transition: color 0.2s ease;
+			font-weight: 700;
+			cursor: pointer;
+		}
+
+		#presets > li:hover, #presets > li.active {
+			color: #666;
+			text-decoration: none;
+		}
+
+		#presets > li.active {
+			color: #000;
+		}
+
+		label {
+			display: block;
+			margin-bottom: 0.25rem;
+			font-weight: bold;
+		}
+
+		input[type='range'],
+		input[type='number'] {
+			width: 100%;
+		}
+
+		button {
+			padding: 0.5rem 1rem;
+			font-size: 1rem;
+			cursor: pointer;
+		}
+
+		.samples {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+			gap: 1rem;
+			max-width: var(--samples-width);
+			margin: 0 auto 2rem auto;
+		}
+
+		.sample {
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			overflow: hidden;
+			background: #fff;
+			display: flex;
+			flex-direction: column;
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		}
+
+		.color-pair {
+			display: flex;
+			height: 80px;
+		}
+
+		.color-block {
+			flex: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 0.9rem;
+			font-weight: bold;
+			text-align: center;
+		}
+
+		.color-block.light {
+			color: #000;
+		}
+
+		.color-block.dark {
+			color: #fff;
+		}
+
+		.color-info {
+			display: flex;
+			justify-content: space-around;
+			padding: 0.25rem;
+			font-family: monospace;
+			font-size: 0.85rem;
+			background: #fafafa;
+			border-top: 1px solid #ddd;
+		}
+
+		.color-info:last-child {
+			border-bottom: 1px solid #ddd;
+		}
+
+		.footer {
+			text-align: center;
+			font-size: 0.9rem;
+			color: #666;
+			padding: 1rem;
+			border-top: 1px solid #ddd;
+			margin-top: 1rem;
+			background: #f4f4f4;
+		}
+		section {
+			display: none;
+		}
+	</style>
+</head>
+<body>
+
+<h1>Color Pairs with a Given ΔE2000</h1>
+<p class="intro">Visualize color difference in RGB space based on our <a href="https://github.com/michel-leonard/ciede2000-color-matching/blob/main/ciede-2000.js#L6">JavaScript</a> ΔE2000 function — fast, precise, and educational.</p>
+
+<section>
+	<h2>About this tool</h2>
+	<ul>
+		<li>Select a ΔE2000 value between 0.0 and 118.0.</li>
+		<li>See RGB color pairs with that color distance (±0.05).</li>
+		<li>Update the sequence to generate new pairs, up to 1000 sequences available.</li>
+		<li>Click "Details" to view the 10-step ΔE2000 calculation between each pair.</li>
+		<li>Both ΔE2000 and sequence are stored in the URL for easy sharing and reproducibility.</li>
+		<li>All conversions to L*a*b* are done using the D65 illuminant.</li>
+		<li>Pure Vanilla JavaScript — no libraries or frameworks.</li>
+	</ul>
+</section>
+
+<div class="deltaE-display" id="delta-e-2000-display">ΔE2000 : 15</div>
+
+<div class="controls">
+	<div>
+		<ul id="presets">
+			<li data-min="0.0" data-max="0.8">Identical</li>
+			<li data-min="0.8" data-max="2.0">Just noticeable</li>
+			<li data-min="2.0" data-max="6.0">Close</li>
+			<li data-min="6.0" data-max="15.0">Distinct</li>
+			<li data-min="15.0" data-max="30.0">Comfortable</li>
+			<li data-min="30.0" data-max="70.0">Strong</li>
+		</ul>
+	</div>
+
+	<p>Select a ΔE value (±0.05) then update the sequence to generate new color pairs.</p>
+
+	<div>
+		<label for="delta-e-2000-select">ΔE2000</label>
+		<input type="range" id="delta-e-2000-select" min="0" max="118" step="0.1" value="15" />
+	</div>
+
+	<div>
+		<label for="random-seed">Sequence</label>
+		<input type="range" id="random-seed" min="0" max="1000" step="1" value="250" />
+	</div>
+
+	<p id="status-message">Generation pending...</p>
+</div>
+
+<div class="samples" id="contents"></div>
+
+<div class="footer">
+		Classic Software Engineering Solutions — <a href="https://bit.ly/color-difference">bit.ly/color-difference</a> | This is not an official CIE application.
+</div>
+<script src="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@v1.0.0/docs/assets/scripts/cie-delta-e-2000.js" onerror="this.onerror=null;this.src='./assets/scripts/cie-delta-e-2000.js';"></script>
+<script src="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@v1.0.0/docs/assets/scripts/all-colors.js" onerror="this.onerror=null;this.src='./assets/scripts/all-colors.js';"></script>
+<script>
+	// Reproducible Generator.
+	class Xorshift {
+		constructor(seed) {
+			this.state = BigInt(seed) ^ 0xff51afd7ed558ccdn
+			this.next()
+		}
+		next() {
+			this.state ^= (this.state << 13n) & 0xFFFFFFFFFFFFFFFFn
+			this.state ^= (this.state >> 7n) & 0xFFFFFFFFFFFFFFFFn
+			this.state ^= (this.state << 17n) & 0xFFFFFFFFFFFFFFFFn
+			return this.state & 0xFFFFFFFFFFFFFFFFn
+		}
+		nextFloat(min, max) {
+			return min + (Number(this.next()) / Number(0xFFFFFFFFFFFFFFFFn)) * (max - min)
+		}
+		nextInt(min, max) {
+			return min + this.next() (max - min + 1)
+		}
+		nextBool() {
+			return (this.next() & 1n) === 1n
+		}
+	}
+	const el_delta_display = document.getElementById('delta-e-2000-display')
+	const el_presets = document.getElementById('presets')
+	const el_delta_select = document.getElementById('delta-e-2000-select')
+	const el_random_seed = document.getElementById('random-seed')
+	const el_status_message = document.getElementById('status-message')
+	const el_contents = document.getElementById('contents')
+	const n_colors_display = 6, default_delta_e = 15, default_random_seed = 250
+
+	// Conversion.
+	// rgb in 0..1
+	function rgb_to_xyz(r, g, b) {
+		// Apply a gamma correction to each channel.
+		r = r < 0.040448236277105097 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
+		g = g < 0.040448236277105097 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
+		b = b < 0.040448236277105097 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
+
+		// Applying linear transformation using RGB to XYZ transformation matrix.
+		var x = r * 41.24564390896921145 + g * 35.75760776439090507 + b * 18.04374830853290341
+		var y = r * 21.26728514056222474 + g * 71.51521552878181013 + b * 7.21749933075596513
+		var z = r * 1.93338955823293176 + g * 11.91919550818385936 + b * 95.03040770337479886
+
+		return [x, y, z]
+	}
+
+	function xyz_to_lab(x, y, z) {
+		// Reference white point : D65 2° Standard observer
+		var refX = 95.047
+		var refY = 100.000
+		var refZ = 108.883
+
+		x /= refX
+		y /= refY
+		z /= refZ
+
+		// Applying the CIE standard transformation.
+		x = x < 216.0 / 24389.0 ? ((841.0 / 108.0) * x) + (4.0 / 29.0) : Math.cbrt(x)
+		y = y < 216.0 / 24389.0 ? ((841.0 / 108.0) * y) + (4.0 / 29.0) : Math.cbrt(y)
+		z = z < 216.0 / 24389.0 ? ((841.0 / 108.0) * z) + (4.0 / 29.0) : Math.cbrt(z)
+
+		var l = (116.0 * y) - 16.0
+		var a = 500.0 * (x - y)
+		var b = 200.0 * (y - z)
+
+		return [l, a, b]
+	}
+
+	// rgb in 0..1
+	function rgb_to_lab(r, g, b) {
+		var xyz = rgb_to_xyz(r, g, b)
+		return xyz_to_lab(xyz[0], xyz[1], xyz[2])
+	}
+
+	function lab_to_xyz(l, a, b) {
+		// Reference white point : D65 2° Standard observer
+		var refX = 95.047
+		var refY = 100.000
+		var refZ = 108.883
+
+		var y = (l + 16.0) / 116.0
+		var x = a / 500.0 + y
+		var z = y - b / 200.0
+
+		var x3 = x * x * x
+		var z3 = z * z * z
+
+		x = x3 < 216.0 / 24389.0 ? (x - 4.0 / 29.0) / (841.0 / 108.0) : x3
+		y = l < 8.0 ? l / (24389.0 / 27.0) : y * y * y
+		z = z3 < 216.0 / 24389.0 ? (z - 4.0 / 29.0) / (841.0 / 108.0) : z3
+
+		return [x * refX, y * refY, z * refZ]
+	}
+
+	// rgb in 0..1
+	function xyz_to_rgb(x, y, z) {
+		// Applying linear transformation using the XYZ to RGB transformation matrix.
+		var r = x * 0.032404541621141049051 + y * -0.015371385127977165753 + z * -0.004985314095560160079
+		var g = x * -0.009692660305051867686 + y * 0.018760108454466942288 + z * 0.00041556017530349983
+		var b = x * 0.000556434309591145522 + y * -0.002040259135167538416 + z * 0.010572251882231790398
+
+		// Apply gamma correction.
+		r = r < 0.003130668442500634 ? 12.92 * r : 1.055 * Math.pow(r, 1.0 / 2.4) - 0.055
+		g = g < 0.003130668442500634 ? 12.92 * g : 1.055 * Math.pow(g, 1.0 / 2.4) - 0.055
+		b = b < 0.003130668442500634 ? 12.92 * b : 1.055 * Math.pow(b, 1.0 / 2.4) - 0.055
+
+		return [r, g, b]
+	}
+
+	// rgb in 0..1
+	function lab_to_rgb(l, a, b) {
+		var xyz = lab_to_xyz(l, a, b)
+		return xyz_to_rgb(xyz[0], xyz[1], xyz[2])
+	}
+
+	// rgb in 0..255
+	function hex_to_rgb(s) {
+		// Also support the short syntax (ie "#FFF") as input.
+		var n = parseInt((s.length === 4 ? s[0] + s[1] + s[1] + s[2] + s[2] + s[3] + s[3] : s).substring(1), 16)
+		return [n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff]
+	}
+
+	// rgb in 0..255
+	function rgb_to_hex(r, g, b) {
+		// Also provide the short syntax (ie "#FFF") as output.
+		var s = '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0')
+		return s[1] === s[2] && s[3] === s[4] && s[5] === s[6] ? '#' + s[1] + s[3] + s[5] : s
+	}
+
+	let generate_timed
+	const generate = (arg) => {
+		if (arg === true)
+			_generate()
+		else {
+			clearTimeout(generate_timed)
+			generate_timed = setTimeout(_generate, 120)
+		}
+	}
+	const _generate = () => {
+		const t_1 = Date.now()
+		const target = +el_delta_select.value, seed = +el_random_seed.value
+		el_delta_display.innerText = `ΔE : ${el_delta_select.value}`
+		let url = window.location.href.replace(/[#?].*/, '')
+		if (target !== default_delta_e || seed !== default_random_seed)
+			url += `?seq=${el_random_seed.value}&delta-e=${el_delta_select.value}`
+		window.history.replaceState(null, '', url);
+		const rng = new Xorshift(seed)
+		const pal = [...colors]
+		pal.sort(() => rng.nextBool() ? 1 : -1)
+		const result = [ ]
+		let avg = 0
+		for(let i = 0, n = n_colors_display - 3; i < pal.length && result.length < n; ++i) {
+			const [l1, a1, b1] = pal[i][2]
+			for (let j = i + (target !== 0.0); j < pal.length && result.length < n; ++j) {
+				const [l2, a2, b2] = pal[j][2]
+				const dE = ciede_2000(l1, a1, b1, l2, a2, b2)
+				if (Math.abs(dE - target) < 0.05) {
+					avg += dE
+					result.push([
+						[rgb_to_hex(pal[i][0][0], pal[i][0][1], pal[i][0][2]), pal[i][2], pal[i][1]],
+						[rgb_to_hex(pal[j][0][0], pal[j][0][1], pal[j][0][2]), pal[j][2], pal[j][1]],
+					])
+				}
+			}
+		}
+		const dl_hi = 4.7e-9 * target ** 7 - 3.85e-7 * target ** 6 + 1.95629e-5 * target ** 5 - 0.000609789 * target ** 4 + 0.0111558 * target ** 3 - 0.11794 * target ** 2 + 2.13048 * target - 0.497233,  dl_lo = -dl_hi
+		const da_hi = -6.4e-9 * target ** 7 + 8.687e-7 * target ** 6 - 7.51278e-5 * target ** 5 + 0.00397071 * target ** 4 - 0.119377 * target ** 3 + 1.7323 * target ** 2 - 4.5603 * target + 10.443,  da_lo = -da_hi
+		const db_hi = +4.0e-10 * target ** 8 - 6.74e-8 * target ** 7 + 6.4633e-6 * target ** 6 - 0.000388605 * target ** 5 + 0.0143932 * target ** 4 - 0.308025 * target ** 3 + 3.26374 * target ** 2 - 7.84867 * target + 12.9076,  db_lo = -db_hi
+		for(let l2, a2, b2, i = 0; (!result.length && i < 200000) || (i < 50000 && result.length < n_colors_display); ++i) {
+			let l1 = rng.nextFloat(0.0, 100.0), a1 = rng.nextFloat(-86.0, 98.0), b1 = rng.nextFloat(-108, 95.0)
+			l2 = l1 + (target !== 0) * rng.nextFloat(Math.max(dl_lo, 0.0 - l1), Math.min(dl_hi, 100.0 - l1))
+			a2 = a1 + (target !== 0) * rng.nextFloat(Math.max(da_lo, -86.0 - a1), Math.min(da_hi, 98.0 - a1))
+			b2 = b1 + (target !== 0) * rng.nextFloat(Math.max(db_lo, -108.0 - b1), Math.min(db_hi, 95.0 - b1))
+			const dE = ciede_2000(l1, a1, b1, l2, a2, b2)
+			if (Math.abs(dE - target) < 0.05) {
+				const rgb1 = lab_to_rgb(l1, a1, b1)
+				if (rgb1.every(e => e >= 0.0 && e <= 1.0)) {
+					const rgb2 = lab_to_rgb(l2, a2, b2)
+					if (rgb2.every(e => e >= 0.0 && e <= 1.0)) {
+						for (let j = 0; j < 3; ++j) {
+							rgb1[j] = Math.round(255.0 * rgb1[j])
+							rgb2[j] = Math.round(255.0 * rgb2[j])
+						}
+						if (target === 0 || rgb1.some((e, i) => e !== rgb2[i])) {
+							avg += dE
+							result.push([
+								[rgb_to_hex(...rgb1), [l1, a1, b1]],
+								[rgb_to_hex(...rgb2), [l2, a2, b2]]
+							])
+						}
+					}
+				}
+			}
+		}
+		result.sort((a, b) => b[0][1][0] - a[0][1][0])
+		// Display Results.
+		for(let i = 0; i < result.length; ++i){
+			const el = el_contents.children[i]
+			el.style.display = 'flex'
+			const c_1 = el.firstElementChild.firstElementChild;
+			const c_2 = el.firstElementChild.lastElementChild;
+			c_1.classList = result[i][0][1][0] < 50 ? 'color-block dark' : 'color-block light'
+			c_2.classList = result[i][1][1][0] < 50 ? 'color-block dark' : 'color-block light'
+			c_1.style.backgroundColor = c_1.innerText = result[i][0][0]
+			c_2.style.backgroundColor = c_2.innerText = result[i][1][0]
+			if (result[i][0].length === 3) {
+				el.children[1].style.display = 'flex'
+				const t_1 = el.children[1].firstElementChild;
+				const t_2 = el.children[1].lastElementChild;
+				t_1.innerText = result[i][0][2] + " "
+				t_2.innerText = result[i][1][2]
+			} else
+				el.children[1].style.display = 'none'
+			const a = el.lastElementChild.firstElementChild
+			const [l1, a1, b1] = result[i][0][1].map(e => e.toFixed(1))
+			const [l2, a2, b2] = result[i][1][1].map(e => e.toFixed(1))
+			a.href = a.href.replace(/[#?].*$/, `?L1=${l1}&a1=${a1}&b1=${b1}&L2=${l2}&a2=${a2}&b2=${b2}`)
+		}
+		for(let i = result.length; i < n_colors_display; ++i)
+			el_contents.children[i].style.display = 'none'
+		avg /= result.length
+		for(let i = 0; i < el_presets.children.length; ++i) {
+			const min = +el_presets.children[i].dataset.min, max = +el_presets.children[i].dataset.max
+			el_presets.children[i].classList[min <= avg && avg <= max ? "add" : "remove"]('active')
+		}
+		const t_2 = Date.now()
+		el_status_message.innerHTML = `Response in <b>${Math.round(t_2 - t_1)}</b> ms with an average color difference of <b>${avg.toFixed(2)}</b> within the samples.`
+	}
+
+	// Initialization.
+	for(let i = 0; i < colors.length; ++i)
+		colors[i][2] = rgb_to_lab(colors[i][0][0] / 255.0, colors[i][0][1] / 255.0, colors[i][0][2] / 255.0)
+	const url = new URL(window.location)
+	el_delta_select.value = url.searchParams.get('delta-e') ?? default_delta_e
+	el_random_seed.value = url.searchParams.get('seq') ?? default_random_seed
+	el_contents.innerHTML = '<div class="sample"><div class="color-pair"><div class="color-block"></div><div class="color-block"></div></div><div class="color-info"><span></span><span></span></div><div class="color-info"><a target="_blank" href="https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?">Details</a></div></div>'.repeat(n_colors_display)
+	el_random_seed.addEventListener('input', generate)
+	el_delta_select.addEventListener('input', generate)
+	el_presets.addEventListener('click', e => {
+		const el = e.target
+		const min = +el.dataset.min
+		const max = +el.dataset.max
+		if (isFinite(min) && isFinite(max)) {
+			const rng = new Xorshift(+el_random_seed.value)
+			el_delta_select.value = Math.round(10.0 * rng.nextFloat(min, max)) / 10.0
+			_generate()
+		}
+	})
+	generate(true)
+
+</script>
+</body>
+</html>
