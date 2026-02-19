@@ -1,0 +1,108 @@
+name: ΔE2000 against OpenJDK in Java
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 61 seconds.
+
+on:
+  schedule:
+    - cron: '26 5 7 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of OpenJDK in Java"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/java"
+
+jobs:
+  test-implementation-de00-openJDK:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Java
+        run: command -v javac > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes default-jdk ; }
+
+      - name: 🔧 Initialize the Java source file
+        run: |
+          ####################################################################
+          ######           1. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          'public class CIEDE_2000_VS_OpenJDK {' \
+          '' \
+          '	public static void main(String[] args) {' \
+          '		long n_iterations = Long.parseLong(args[0]);' \
+          '		double l1 = Math.random() * 100.0, a1 = Math.random() * 256.0 - 180.0, b1 = Math.random() * 256.0 - 180.0;' \
+          '		double max_err = 0.0;' \
+          '		for (long i = 0; i < n_iterations; ++i) {' \
+          '			final double l2 = Math.random() * 100.0, a2 = Math.random() * 256.0 - 180.0, b2 = Math.random() * 256.0 - 180.0;' \
+          '			final double d1 = ciede_2000(l1, a1, b1, l2, a2, b2);' \
+          '			final double d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2);' \
+          '			final double err = Math.abs(d2 - d1);' \
+          '			if (max_err < err) {' \
+          '				max_err = err;' \
+          '				System.out.format("Greatest deviation of %g in color differences at index %d.\n", err, i + 1);' \
+          '			}' \
+          '			l1 = l2;' \
+          '			a1 = a2;' \
+          '			b1 = b2;' \
+          '		}' \
+          '		System.exit(max_err < 1E-10 ? 0 : 1);' \
+          '	}' \
+          '' > CIEDE_2000_VS_OpenJDK.java
+
+          # Define realistic and random parametric factors.
+          kl=$(shuf -e 0.5 1.0 1.5 2.0 2.5 -n 1)
+          kc=$(shuf -e 0.5 1.0 1.5 2.0 2.5 -n 1)
+          kh=$(shuf -e 0.5 1.0 1.5 2.0 2.5 -n 1)
+
+          ####################################################################
+          ######       2. Inject the OpenJDK’s function in Java         ######
+          ####################################################################
+          printf '%s\n' '' \
+          'static final int L = 0,  A = 1, B = 2;' \
+          'static final double kl = '$kl', kc = '$kc', kh = '$kh';' \
+          '' \
+          'static double ciede_2000_other(double l1, double a1, double b1, double l2, double a2, double b2) {' \
+          '	return Math.sqrt(cie00(new double[]{l1, a1, b1}, new double[]{l2, a2, b2}));' \
+          '}' \
+          '' >> CIEDE_2000_VS_OpenJDK.java
+
+          url="https://raw.githubusercontent.com/jline/jline3"
+          url="$url/778edccd4c1d863c2d3a89b9fc387c38203c7009/terminal/src/main/java/org/jline/utils/Colors.java"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '369,431p' >> CIEDE_2000_VS_OpenJDK.java
+
+          ####################################################################
+          ######       3. Inject the native function in MATLAB          ######
+          ######               and apply the correction                 ######
+          ######            commented out in the source code            ######
+          ####################################################################
+          sed 's/k_l = 1\.0, k_c = 1\.0, k_h = 1\.0;/k_l = '$kl', k_c = '$kc', k_h = '$kh';/' ciede-2000.java |
+          awk 'BEGIN { skip = -1 } {
+            if ($0 ~ /Sharma.s formulation/) { skip = 2 }
+            else if (0 < skip) { skip-- }
+            else if (skip == 0) { skip--; sub(/^[^\/]*\/\//, ""); print }
+            else {  print }
+          }' >> CIEDE_2000_VS_OpenJDK.java
+
+          printf '%s\n' '' \
+          '}' >> CIEDE_2000_VS_OpenJDK.java
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@CIEDE_2000_VS_OpenJDK.java || true
+
+      - name: ⚙️ Compile the Java testing program
+        run: javac CIEDE_2000_VS_OpenJDK.java
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Java
+        run: |
+          grep -F 'k_l =' CIEDE_2000_VS_OpenJDK.java | tr -d '\t'
+          java CIEDE_2000_VS_OpenJDK 100000000

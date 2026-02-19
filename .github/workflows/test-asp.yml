@@ -1,0 +1,94 @@
+name: ASP CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 75 seconds.
+
+on:
+  schedule:
+    - cron: '26 5 16 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in ASP"
+  input_file: "test-cases.csv contains lines like 42,2,51,49.2,-0.1,28 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 42,2,51,49.2,-0.1,28,10.842312359801503212260300714472 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/asp"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-asp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up FreeBASIC Compiler version 1.10.1 released on 2023-12-24
+        run: |
+          params="--no-verbose --no-check-certificate --timeout=5 --tries=1"
+          dep_uri="ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb"
+          ########################################################################################
+          ####  STEP 1:                          Install Dependencies                         ####
+          ########################################################################################
+          wget $params http://archive.ubuntu.com/$dep_uri                                    -O X.deb ||
+          wget $params http://security.ubuntu.com/$dep_uri                                   -O X.deb ||
+          wget $params http://ftp.lip6.fr/pub/linux/distributions/Ubuntu/archive/$dep_uri    -O X.deb
+          sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes ./X.deb
+          ########################################################################################
+          ####  STEP 2:                     Download & Extract FreeBASIC                      ####
+          ########################################################################################
+          wget $params https://users.freebasic-portal.de/freebasicru/user-files/FreeBASIC-1.10.0-linux-x86_64.tar.gz  -O X.tar.gz ||
+          wget $params https://local.doublebyte.ru/static/FreeBASIC-1.10.1-linux-x86_64.tar.gz                        -O X.tar.gz ||
+          wget $params http://downloads.sourceforge.net/fbc/FreeBASIC-1.10.1-linux-x86_64.tar.gz?download             -O X.tar.gz ||
+          wget $params https://github.com/engineer-man/piston/releases/download/pkgs/freebasic-1.9.0.pkg.tar.gz       -O X.tar.gz ||
+          wget $params http://mirror.motherhamster.org/dependencies/FreeBASIC-1.08.1-linux-x86_64.tar.gz              -O X.tar.gz
+          sudo rm -rf /opt/FreeBASIC && mkdir /opt/FreeBASIC
+          tar -xzf X.tar.gz --strip-components=1 -C /opt/FreeBASIC
+          ########################################################################################
+          ####  STEP 3:                     Add FreeBASIC to System PATH                      ####
+          ########################################################################################
+          sudo ln --backup --symbolic --verbose /opt/FreeBASIC/bin/fbc /usr/local/bin/fbc
+          ########################################################################################
+          ####  CONCLUSION:               FreeBASIC Installed in Under 15s                    ####
+          ########################################################################################
+          sudo rm -rf X* && printf '...\n...\n...\n' && fbc --version
+
+      - name: ⚙️ Compile the ASP Classic 3.0 (IIS 10.0) script
+        run: |
+          sed -n '/Public/, /Dim t As/p' ciede-2000.bas > driver-asp.bas
+          sed -n '/n = /, /End Function/p' ciede-2000.asp >> driver-asp.bas
+          sed -n '/Sub/,$p' tests/bas/ciede-2000-driver.bas >> driver-asp.bas
+          fbc -O 2 driver-asp.bas
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in ASP and stream to verifier
+        run: ./driver-asp test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

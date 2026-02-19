@@ -1,0 +1,82 @@
+name: ΔE2000 against Mathics3 in Python
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 84 seconds.
+
+on:
+  schedule:
+    - cron: '33 5 12 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Mathics3 in Python"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/py"
+
+jobs:
+  test-implementation-de00-mathics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Python (alternative)
+        run: command -v python3 > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes python3 ; }
+
+      - name: 🔧 Initialize the Python source file
+        run: |
+          ########################################################################
+          ########       1. Inject the CIEDE2000 native function          ########
+          ########################################################################
+          cat ciede-2000.py > delta-e-2000-vs-mathics.py
+
+          ########################################################################
+          ########      2. Inject the CIEDE2000 Mathics3 function         ########
+          ########################################################################
+          printf '\n%s' 'from math import atan2, cos, exp, pi, radians, sin, sqrt' \
+          'def ciede_2000_mathics(L1, a1, b1, L2, a2, b2):' \
+          '    kL = kC = kH = 1' \
+          '    e = 1E-30' \
+          '' >> delta-e-2000-vs-mathics.py
+
+          url="https://raw.githubusercontent.com/Mathics3/mathics-core"
+          url="$url/454610e2ae0ba50cde512e405bd533568785ebf4/mathics/builtin/colors/color_directives.py"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '35,83p' >> delta-e-2000-vs-mathics.py
+
+          ########################################################################
+          ########       3. Use random L*a*b* colors to display the       ########
+          ########       greatest deviation between implementations       ########
+          ########################################################################
+          printf '\n%s' 'import sys, random' \
+          'n_iterations = int(sys.argv[1])' \
+          'max_diff = 0' \
+          '' \
+          'for i in range(n_iterations):' \
+          '	l1 = random.uniform(0, 100)' \
+          '	a1 = random.uniform(-128, 128)' \
+          '	b1 = random.uniform(-128, 128)' \
+          '	l2 = random.uniform(0, 100)' \
+          '	a2 = random.uniform(-128, 128)' \
+          '	b2 = random.uniform(-128, 128)' \
+          '' \
+          '	delta1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	delta2 = ciede_2000_mathics(l1, a1, b1, l2, a2, b2)' \
+          '' \
+          '	diff = abs(delta1 - delta2)' \
+          '	if diff > max_diff:' \
+          '		max_diff = diff' \
+          '		print(f"Greatest deviation of {max_diff:.2e} at iteration {i}.", flush=True)' \
+          'sys.exit(0 if max_diff < 1E-10 else 1)' \
+          '' >> delta-e-2000-vs-mathics.py
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-mathics.py || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Python
+        run: python3 delta-e-2000-vs-mathics.py 10000000

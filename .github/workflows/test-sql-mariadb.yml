@@ -1,0 +1,104 @@
+name: SQL CIEDE2000 Testing (MariaDB)
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 208 seconds.
+
+on:
+  schedule:
+    - cron: '6 5 8 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in SQL"
+  input_file: "test-cases.csv contains lines like 87,7,75.2,87.9,-5,86 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 87,7,75.2,87.9,-5,86,7.372698547542291127648646866716 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/sql"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-sql-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up MariaDB
+        uses: ankane/setup-mariadb@v1
+        with:
+          mariadb-version: 11.8
+          database: testdb
+
+      - name: ⚙️ Load the CIEDE2000 function into the MariaDB database
+        run: mariadb -V && mariadb -D testdb < ciede-2000.sql
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: |
+          # Splits the large file into as many smaller files as there are vCPUs
+          n_cpu=$(nproc) && ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines |
+          split --unbuffered --lines=$(( ($n_csv_lines + $n_cpu - 1) / $n_cpu )) --numeric-suffixes=1 --additional-suffix=.csv - test-cases-
+          # Shows the name, size and first line of newly created files
+          du -h test-cases-* | awk '{getline line < $2; print $2, "(" $1 "B) contains L*a*b* color pairs for vCPU " NR ", first values =", line}'
+
+      - name: ⚙️ Load CSV file into database
+        run: |
+          mariadb -D testdb -e "SET GLOBAL local_infile=1"
+          for file in test-cases-*; do
+            i=$(echo $file | sed -r 's/[^0-9]+//g')
+            mariadb -D testdb -e "CREATE TABLE colors_$i (
+                L1 Double,
+                a1 Double,
+                b1 Double,
+                L2 Double,
+                a2 Double,
+                b2 Double
+              ) ENGINE=MyISAM"
+            mariadb --local-infile=1 -D testdb -e "
+              LOAD DATA LOCAL INFILE '$file' INTO TABLE colors_$i
+              FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n'
+              (L1,a1,b1,L2,a2,b2)" &
+              echo "Loads the $(wc -l < $file)-line file $file in table colors_$i"
+          done
+          wait
+
+      - name: ⚡ Solves test cases by calculating ΔE2000 in MariaDB (parallelized operation)
+        run: |
+          for file in test-cases-*; do
+            rm $file
+            i=$(echo $file | sed -r 's/[^0-9]+//g')
+            mariadb -D testdb -B -N -q -e "
+            SELECT CONCAT_WS(',', L1,a1,b1,L2,a2,b2, ciede_2000(L1,a1,b1,L2,a2,b2)) FROM colors_$i
+            " > solved-$file &
+            echo "Starts parallel processing on table colors_$i and places the results in solved-$file"
+          done
+          wait
+
+      - name: 🚀 Check that C99 calculations matches MariaDB’s
+        run:  cat solved-* | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi
