@@ -1,0 +1,69 @@
+name: PHP CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 70 seconds.
+
+on:
+  schedule:
+    - cron: '6 5 2 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in PHP"
+  input_file: "test-cases.csv contains lines like 83,17,125,84.6,-9,101.7 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 83,17,125,84.6,-9,101.7,13.036851291337608304041577027623 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/php"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-php:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up PHP (alternative) and GCC
+        run: |
+          command -v php > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes php-cli ; }
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🛠️ Create custom php.ini
+        run: |
+          printf "%s\n" \
+          "zend_extension=opcache.so" \
+          "opcache.enable=1" \
+          "opcache.enable_cli=1" \
+          "opcache.jit=1235" \
+          "opcache.jit_buffer_size=32M" \
+          "memory_limit=64M" > custom-php.ini
+
+      - name: 🚀 Run test cases in PHP and stream to verifier
+        run: php -v && php -n -c custom-php.ini tests/php/ciede-2000-driver.php test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

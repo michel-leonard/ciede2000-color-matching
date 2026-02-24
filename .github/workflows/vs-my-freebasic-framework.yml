@@ -1,0 +1,116 @@
+name: ΔE2000 against My FreeBasic Framework in VBA
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 53 seconds.
+
+on:
+  schedule:
+    - cron: '38 2 19 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of My FreeBasic Framework in VBA"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/bas"
+
+jobs:
+  test-implementation-de00-my-freebasic-framework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up FreeBASIC Compiler version 1.10.1 released on 2023-12-24
+        run: |
+          params="--no-verbose --no-check-certificate --timeout=5 --tries=1"
+          dep_uri="ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb"
+          ########################################################################################
+          ####  STEP 1:                          Install Dependencies                         ####
+          ########################################################################################
+          wget $params http://archive.ubuntu.com/$dep_uri                                    -O X.deb ||
+          wget $params http://security.ubuntu.com/$dep_uri                                   -O X.deb ||
+          wget $params http://ftp.lip6.fr/pub/linux/distributions/Ubuntu/archive/$dep_uri    -O X.deb
+          sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes ./X.deb
+          ########################################################################################
+          ####  STEP 2:                     Download & Extract FreeBASIC                      ####
+          ########################################################################################
+          wget $params https://users.freebasic-portal.de/freebasicru/user-files/FreeBASIC-1.10.0-linux-x86_64.tar.gz  -O X.tar.gz ||
+          wget $params https://local.doublebyte.ru/static/FreeBASIC-1.10.1-linux-x86_64.tar.gz                        -O X.tar.gz ||
+          wget $params http://downloads.sourceforge.net/fbc/FreeBASIC-1.10.1-linux-x86_64.tar.gz?download             -O X.tar.gz ||
+          wget $params https://github.com/engineer-man/piston/releases/download/pkgs/freebasic-1.9.0.pkg.tar.gz       -O X.tar.gz ||
+          wget $params http://mirror.motherhamster.org/dependencies/FreeBASIC-1.08.1-linux-x86_64.tar.gz              -O X.tar.gz
+          sudo rm -rf /opt/FreeBASIC && mkdir /opt/FreeBASIC
+          tar -xzf X.tar.gz --strip-components=1 -C /opt/FreeBASIC
+          ########################################################################################
+          ####  STEP 3:                     Add FreeBASIC to System PATH                      ####
+          ########################################################################################
+          sudo ln --backup --symbolic --verbose /opt/FreeBASIC/bin/fbc /usr/local/bin/fbc
+          ########################################################################################
+          ####  CONCLUSION:               FreeBASIC Installed in Under 15s                    ####
+          ########################################################################################
+          sudo rm -rf X* && printf '...\n...\n...\n' && fbc --version
+
+      - name: 🔧 Initialize the FreeBASIC source file
+        run: |
+          ####################################################################
+          ######    1. Inject the compatible function in FreeBASIC      ######
+          ####################################################################
+          printf '%s\n' '' \
+          'Const PI = 3.14159265358979323846' \
+          'Type Lab' \
+          '	As Double L, a, b' \
+          'End Type' \
+          'Function ciede_2000_other(l_1 As Double, a_1 As Double, b_1 As Double, l_2 As Double, a_2 As Double, b_2 As Double) As Double' \
+          '	Dim Lab1 As Lab = ( l_1, a_1, b_1 )' \
+          '	Dim Lab2 As Lab = ( l_2, a_2, b_2 )' \
+          '' > ciede-2000-vs-my-freebasic-framework.bas
+
+          url="https://raw.githubusercontent.com/XusinboyBekchanov/MyFbFramework"
+          url="$url/cda7c0b6a353c95f70455e90860cb5158a0e56d4/inc/CSDDC.bi"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '395,427p' >> ciede-2000-vs-my-freebasic-framework.bas
+
+          ####################################################################
+          ######      2. Inject the native function  in FreeBASIC       ######
+          ####################################################################
+          sed -n '/ciede_2000/,$p' ciede-2000.bas >> ciede-2000-vs-my-freebasic-framework.bas
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          'Dim as Integer n_iterations = Val(Command(1))' \
+          'Dim as Double max_err = 0.0, l1, a1, b1, l2, a2, b2, d1, d2, deviation' \
+          'Randomize Timer' \
+          'For i as Integer = 0 to n_iterations - 1' \
+          '	l1 = Rnd * 100.0' \
+          '	a1 = Rnd * 256.0 - 128.0' \
+          '	b1 = Rnd * 256.0 - 128.0' \
+          '	l2 = Rnd * 100.0' \
+          '	a2 = Rnd * 256.0 - 128.0' \
+          '	b2 = Rnd * 256.0 - 128.0' \
+          '	d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '	deviation = Abs(d2 - d1)' \
+          '	If max_err < deviation then' \
+          '		max_err = deviation' \
+          '		Print "Greatest deviation of"; deviation; " in color differences at iteration"; (i + 1); "."' \
+          '	End If' \
+          'Next' \
+          'If max_err < 1.0E-10 Then End 0 Else End 1 End If' \
+          '' >> ciede-2000-vs-my-freebasic-framework.bas
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-my-freebasic-framework.bas || true
+
+      - name: ⚙️ Compile the FreBASIC test program
+        run: fbc -O 2 ciede-2000-vs-my-freebasic-framework.bas
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in FreeBASIC
+        run: ./ciede-2000-vs-my-freebasic-framework 50000000

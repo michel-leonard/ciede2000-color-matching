@@ -1,0 +1,78 @@
+name: Wren CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 106 seconds.
+
+on:
+  schedule:
+    - cron: '11 5 27 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Wren"
+  input_file: "test-cases.csv contains lines like 22.6,-1.5,117,9,22,109 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 22.6,-1.5,117,9,22,109,15.041238521663031503168507705691 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/wren"
+  n_csv_lines: 10000000
+  n_lines_per_file: 50000
+
+jobs:
+  test-implementation-de00-wren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Wren and GCC
+        run: |
+          command -v wren_cli > /dev/null || {
+            command -v make > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes make ; }
+            # Use Wren version 0.4.0 for which the ΔE2000 driver has been designed
+            WREN_URL="https://github.com/wren-lang/wren-cli/archive/18553636618a4d33f10af9b5ab92da6431784a8c.tar.gz"
+            # Extract the 512KB Wren archive into a temporary directory
+            WREN_DIR=$(mktemp --directory)
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$WREN_URL" -O- |
+            tar -C $WREN_DIR --strip-components=1 -xzf -
+            # Install Wren from the C sources
+            make -C $WREN_DIR/projects/make -f wren_cli.make
+            # Move wren_cli to a suitable location in the system PATH
+            sudo mv --backup --verbose $WREN_DIR/bin/wren_cli /usr/local/bin/wren_cli
+            # Clean up everything else
+            sudo rm -rf $WREN_DIR
+            # Congratulations, Wren was installed in 15 seconds !
+          }
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+          echo '---' && wren_cli --version && echo '---' && gcc --version
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run:  gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases (split into ${{ env.n_lines_per_file }}-line files)
+        run: |
+          ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines | split --unbuffered --lines=$n_lines_per_file - X
+          du -h X* | awk '{getline line < $2; print NR ". File", $2, "(" $1 "B) contains '$n_lines_per_file' L*a*b* color pairs, first values =", line}'
+
+      - name: 🚀 Run test cases in Wren and stream to verifier
+        run:  wren_cli tests/wren/ciede-2000-driver.wren $(ls X* | tr '\n' ' ') | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

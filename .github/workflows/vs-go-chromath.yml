@@ -1,0 +1,97 @@
+name: ΔE2000 against go-chromath in Go
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 56 seconds.
+
+on:
+  schedule:
+    - cron: '22 2 18 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of go-chromath in Go"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/go"
+
+jobs:
+  test-implementation-de00-go-chromath:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Go (alternative)
+        run: command -v go > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes go ; }
+
+      - name: 🔧 Initialize the Go source file
+        run: |
+          ####################################################################
+          ######      1. Inject the interoperable function in Go        ######
+          ####################################################################
+          printf '\n%s' 'package main' \
+          'import (' '"fmt"' '"math"' '"math/rand"' '"os"' '"strconv"' ')' \
+          '' \
+          'const pi = math.Pi' \
+          'func sqr(v float64) float64 { return v * v; }' \
+          'func ciede_2000_other(l_1, a_1, b_1, l_2, a_2, b_2 float64) float64 {' \
+          '	k_l := 1.0' \
+          '	k_c := 1.0' \
+          '	k_h := 1.0' \
+          '' > ciede-2000-vs-go-chromath.go
+
+          url="https://raw.githubusercontent.com/jkl1337/go-chromath"
+          url="$url/348bf201a4a54b01e1de16df0a5636b3779238e5/deltae/deltae.go"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '32,98p' >> ciede-2000-vs-go-chromath.go
+
+          for s in 's/std.L()/l_1/g;s/sample.L()/l_2/g' 's/std.A()/a_1/g;s/sample.A()/a_2/g' \
+          's/std.B()/b_1/g;s/sample.B()/b_2/g' 's/klch.KL/k_l/g;s/klch.KC/k_c/g;s/klch.Kh/k_h/g';
+          	do sed -i "$s" ciede-2000-vs-go-chromath.go
+          done
+
+          ####################################################################
+          ######        2. Inject the native function in Go             ######
+          ####################################################################
+          sed -n '/{/,$p' ciede-2000.go >> ciede-2000-vs-go-chromath.go
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          SEED=$(date +%s)
+          printf '%s\n' '' \
+          'func main() {' \
+          '	n_iterations, _ := strconv.Atoi(os.Args[1])' \
+          '	const seed int64 = 0x'$SEED \
+          '	rng := rand.New(rand.NewSource(seed))' \
+          '	max_err := 0.0' \
+          '	l1 := rng.Float64() * 100.0' \
+          '	a1 := rng.Float64() * 256.0 - 128.0' \
+          '	b1 := rng.Float64() * 256.0 - 128.0' \
+          '	for i := 0; i < n_iterations; i++ {' \
+          '		l2 := rng.Float64() * 100.0' \
+          '		a2 := rng.Float64() * 256.0 - 128.0' \
+          '		b2 := rng.Float64() * 256.0 - 128.0' \
+          '		d1 := ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '		d2 := ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '		err := math.Abs(d2 - d1)' \
+          '		if err > max_err {' \
+          '			max_err = err' \
+          '			fmt.Printf("Greatest deviation of %.2e in ΔE2000 at iteration %d.\n", err, i + 1)' \
+          '		}' \
+          '		l1, a1, b1 = l2, a2, b2' \
+          '	}' \
+          '	os.Exit(map[bool]int{false: 1, true: 0}[max_err < 1E-10])' \
+          '}' \
+          '' >> ciede-2000-vs-go-chromath.go
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-go-chromath.go || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Go
+        run: go run ciede-2000-vs-go-chromath.go 100000000

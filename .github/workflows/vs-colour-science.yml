@@ -1,0 +1,102 @@
+name: ΔE2000 against Colour Science in Python
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 101 seconds.
+
+on:
+  schedule:
+    - cron: '45 3 11 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Colour Science in Python"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/py"
+
+jobs:
+  test-implementation-de00-colour-science:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Python and Pip (alternative)
+        run: command -v pip3 > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes python3-pip ; }
+
+      - name: ⚙️ Ensure that numpy and will be available
+        run: python3 -c "import numpy" > /dev/null 2>&1 || python3 -m pip install numpy
+
+      - name: 🔧 Initialize the Python source file (numpy is required)
+        run: |
+          ########################################################################
+          ########       1. Inject the CIEDE2000 native function          ########
+          ########################################################################
+          awk 'BEGIN { skip = -1 } {
+          	if ($0 ~ /Sharma.s formulation/) { skip = 2 }
+          	else if (0 < skip) { skip-- }
+          	else if (skip == 0) { skip--; sub(/# /, ""); print }
+          	else {  print }
+          }' ciede-2000.py > delta-e-2000-vs-colour-science.py
+
+          ########################################################################
+          ########    2. Inject the Colour Science CIEDE2000  function    ########
+          ########################################################################
+          url="https://raw.githubusercontent.com/colour-science/colour"
+          url="$url/ae990bd75ce8d4238f4d41c7f6a99e5b15e91ce6/colour/difference/delta_e.py"
+
+          printf '\n%s' '' \
+          'import numpy as np' \
+          'def astuple(x):'  '    return x' \
+          'def as_float(x):' '    return x' \
+          'def intermediate_attributes_CIE2000(Lab_1, Lab_2):' \
+          '    L_1, a_1, b_1 = Lab_1' \
+          '    L_2, a_2, b_2 = Lab_2' \
+          '' >> delta-e-2000-vs-colour-science.py
+
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '327,426p' |
+          sed 's/Attributes_Specification_CIE2000//' >> delta-e-2000-vs-colour-science.py
+
+          printf '\n%s' '' \
+          'def ciede_2000_other(Lab_1, Lab_2, textiles = False):' \
+          '' >> delta-e-2000-vs-colour-science.py
+
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '498,513p' >> delta-e-2000-vs-colour-science.py
+
+          ########################################################################
+          ########       3. Use random L*a*b* colors to display the       ########
+          ########       greatest deviation between implementations       ########
+          ########################################################################
+          printf '\n%s' '' \
+          'import sys, random' \
+          'n_iterations = int(sys.argv[1])' \
+          'max_diff = 0' \
+          '' \
+          'for i in range(n_iterations):' \
+          '	l1 = random.uniform(0, 100)' \
+          '	a1 = random.uniform(-128, 128)' \
+          '	b1 = random.uniform(-128, 128)' \
+          '	l2 = random.uniform(0, 100)' \
+          '	a2 = random.uniform(-128, 128)' \
+          '	b2 = random.uniform(-128, 128)' \
+          '' \
+          '	delta1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	delta2 = ciede_2000_other(np.array([l1, a1, b1]), np.array([l2, a2, b2]))' \
+          '' \
+          '	diff = abs(delta1 - delta2)' \
+          '	if diff > max_diff:' \
+          '		max_diff = diff' \
+          '		print(f"Greatest deviation of {max_diff:.2e} at iteration {i}.", flush=True)' \
+          'sys.exit(0 if max_diff < 1E-10 else 1)' \
+          '' >> delta-e-2000-vs-colour-science.py
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-colour-science.py || true
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Python
+        run: python3 delta-e-2000-vs-colour-science.py 1000000
