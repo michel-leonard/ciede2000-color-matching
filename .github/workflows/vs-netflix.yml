@@ -1,0 +1,117 @@
+name: ΔE2000 against Netflix VMAF in C99
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 44 seconds.
+
+on:
+  schedule:
+    - cron: '22 2 26 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Netflix VMAF"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/c"
+
+jobs:
+  test-implementation-de00-netflix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up GCC
+        run: command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: 🔧 Initialize the C99 source file
+        run: |
+          ####################################################################
+          ######           1. Inject the VMAF function in C99           ######
+          ####################################################################
+
+          printf '%s\n' '' \
+          '#include <math.h>' \
+          '#ifndef M_PI' \
+          '#define M_PI 3.14159265358979323846264338328' \
+          '#endif' \
+          '' > ciede-2000-vs-vmaf.c
+
+          gh="https://raw.githubusercontent.com"
+          for url in \
+          	"$gh/Netflix/vmaf/b9ac69e6c4231fad0465021f9e31a841a18261db/libvmaf/src/feature/ciede.c" \
+          	"$gh/mayitayew/ffvmaf/9ff98c1e6b6d16f03cfa6eeed5f24ae3514b3a2d/libvmaf/src/ciede.c" \
+          	"$gh/kapil-4944/cvpr25/b11357c71dd1d0f27045d23d9c14c3a83249349b/workspace/qa/05_VMAF/src/vmaf/libvmaf/src/feature/ciede.c"
+          do
+          	wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- && break
+          done | sed -n '127,237p' >> ciede-2000-vs-vmaf.c
+
+          sed -i 's/float/double/g' ciede-2000-vs-vmaf.c
+          sed -i 's/powf/pow/g' ciede-2000-vs-vmaf.c
+          sed -i 's/fabsf/fabs/g' ciede-2000-vs-vmaf.c
+          printf '\n%s' 'double ciede_2000_vmaf(const double l1, const double a1, const double b1, const double l2, const double a2, const double b2) {' \
+          'const LABColor a = {l1, a1, b1}, b = {l2, a2, b2};' \
+          'return ciede2000(a, b, (struct KSubArgs){1.0, 1.0, 1.0});' \
+          '}' \
+          '' >> ciede-2000-vs-vmaf.c
+
+          ####################################################################
+          ######         2. Inject the native function in C99           ######
+          ####################################################################
+
+          cat ciede-2000.c >> ciede-2000-vs-vmaf.c
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          SEED=$(head -c 8 /dev/urandom | od -An -t x8 | tr -d ' ')
+
+          printf '%s\n' '' \
+          '#include <stdlib.h>' \
+          '#include <stdio.h>' \
+          '#include <inttypes.h>' \
+          '' \
+          'static inline double rand_double(double min, double max, uint64_t *restrict s) {' \
+          '	*s ^= *s << 13, *s ^= *s >> 7, *s ^= *s << 17;' \
+          '	const double res = min + (max - min) * ((double) *s / 18446744073709551616.0);' \
+          '	return res;' \
+          '}' \
+          '' \
+          'int main(int argc, char *argv[]) {' \
+          '	setbuf(stdout, NULL);' \
+          '	uint64_t seed = 0x'$SEED'ULL;' \
+          '	const int n_iterations = (int)strtol(argv[1], 0, 10);' \
+          '	double max_err = 0.0;' \
+          '	for (int i = 0; i < n_iterations; ++i) {' \
+          '		const double l1 = rand_double(0.0, 100.0, &seed);' \
+          '		const double a1 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double b1 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double l2 = rand_double(0.0, 100.0, &seed);' \
+          '		const double a2 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double b2 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double d1 = ciede_2000(l1, a1, b1, l2, a2, b2);' \
+          '		const double d2 = ciede_2000_vmaf(l1, a1, b1, l2, a2, b2);' \
+          '		const double err = d1 < d2 ? d2 - d1 : d1 - d2;' \
+          '		if (max_err < err) {' \
+          '			max_err = err;' \
+          '			printf("Greatest deviation of %.2g in color differences at iteration %d.\n", err, i);' \
+          '		}' \
+          '	}' \
+          '	return max_err < 1E-10 ? 0 : 1;' \
+          '}' \
+          '' >> ciede-2000-vs-vmaf.c
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-vmaf.c || true
+
+      - name: ⚙️ Compile the CIEDE2000 testing program in C
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -Ofast ciede-2000-vs-vmaf.c -o ciede-2000-vs-vmaf -lm
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in C
+        run: ./ciede-2000-vs-vmaf 100000000

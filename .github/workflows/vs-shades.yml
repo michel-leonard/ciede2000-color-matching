@@ -1,0 +1,83 @@
+name: ΔE2000 against shades in R
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 66 seconds.
+
+on:
+  schedule:
+    - cron: '41 2 24 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of shades in R"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/r"
+
+jobs:
+  test-implementation-de00-shades:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up R and Rscript
+        run: |
+          command -v Rscript > /dev/null || {
+            command -v dirmngr > /dev/null && command -v apt-add-repository > /dev/null ||
+            { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes --no-install-recommends software-properties-common dirmngr ; }
+            . /etc/os-release && wget --no-verbose --no-check-certificate --timeout=5 --tries=2 https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc -O- |
+            sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/cran.gpg
+            echo "deb [signed-by=/etc/apt/trusted.gpg.d/cran.gpg] \
+            https://cloud.r-project.org/bin/linux/ubuntu ${VERSION_CODENAME}-cran40/" |
+            sudo tee /etc/apt/sources.list.d/cran.list
+            sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes r-base
+          }
+
+      - name: 🔧 Initialize the R source file
+        run: |
+          Rscript -e 'cat("R version:", R.version.string, "\n")'
+
+          printf '%s\n' 'ciede_2000_other <- function (L1, a1, b1, L2, a2, b2) {' \
+          '	deg2rad <- function(x) x / 180 * pi' \
+          '	rad2deg <- function(x) x / pi * 180' > delta-e-2000-vs-shades.r
+
+          url="https://raw.githubusercontent.com/jonclayden/shades"
+          url="$url/5149b07f393ac7bc3054b65e27b3831e40935610/R/distance.R"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '/LBarPrime/,$p' >> delta-e-2000-vs-shades.r
+
+          cat ciede-2000.r >> delta-e-2000-vs-shades.r
+
+          printf '%s\n' 'args <- commandArgs(trailingOnly = TRUE)' \
+          'n_calls <- if (length(args) < 1) 1000 else as.numeric(args[1])' \
+          'n_1 <- 2 ** 20' \
+          'n_2 = ceiling(n_calls / n_1)' \
+          'max_err <- 0' \
+          'for (i in 1:n_2) {' \
+          '	n <- if (i == 1 && n_calls != n_1) n_calls %% n_1 else n_1' \
+          '	l1 <- runif(n, min = 0.0, max = 100.0)' \
+          '	a1 <- runif(n, min = -128.0, max = 128.0)' \
+          '	b1 <- runif(n, min = -128.0, max = 128.0)' \
+          '	l2 <- runif(n, min = 0.0, max = 100.0)' \
+          '	a2 <- runif(n, min = -128.0, max = 128.0)' \
+          '	b2 <- runif(n, min = -128.0, max = 128.0)' \
+          '	d1 <- ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	d2 <- ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '	err <- max(abs(d2 - d1))' \
+          '	if (max_err < err)' \
+          '		max_err <- err' \
+          '}' \
+          'has_error <- 1E-10 < max_err' \
+          'cat("The largest deviation measured after", as.integer(n_calls), "calculations is", max_err, "so this test is", if (has_error) "FAILED." else "PASSED.")' \
+          'quit(status = as.integer(has_error))' >> delta-e-2000-vs-shades.r
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-shades.r || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in R
+        run: Rscript delta-e-2000-vs-shades.r 50000000

@@ -1,0 +1,65 @@
+name: Nim CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 71 seconds.
+
+on:
+  schedule:
+    - cron: '28 5 17 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Nim"
+  input_file: "test-cases.csv contains lines like 3,113,37,13.4,124.3,-59 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 3,113,37,13.4,124.3,-59,26.974828341909093321093357202513 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/nim"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-nim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Nim and GCC
+        run: |
+          if ! command -v nim > /dev/null; then
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=3 https://nim-lang.org/choosenim/init.sh -O- | sh -s -- -y
+            echo "$HOME/.nimble/bin" >> $GITHUB_PATH
+          fi
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: 🔧 Set up the Nim testing file
+        run: mv tests/nim/ciede-2000-driver.nim tests/nim/ciede_2000_driver.nim
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Nim and stream to verifier
+        run: nim -v && nim c --opt:speed -r tests/nim/ciede_2000_driver.nim test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

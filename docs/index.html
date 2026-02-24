@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="Free online tool to generate, validate, and solve CIE ΔE 2000 color differences in L*a*b* format.">
+	<title>ΔE 2000 Color Difference Tool | L*a*b* CSV Generator & Validator</title>
+	<!-- Tue, 25 Mar 2025 11:18:41 GMT -->
+	<style>body{font-family:Arial,sans-serif;background-color:#f4f4f9;background-image:url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\' viewBox=\'0 0 200 200\'%3E%3Cdefs%3E%3Cpattern id=\'textPattern\' patternUnits=\'userSpaceOnUse\' width=\'200\' height=\'200\'%3E%3Ctext x=\'120\' y=\'50\' font-size=\'20\' fill=\'%23d5d5d5\' transform=\'rotate(40 40 40)\' text-anchor=\'middle\' font-family=\'Arial,sans-serif\'%3Ewith ΔE 2000 ...%3C/text%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'url(%23textPattern)\' /%3E%3C/svg%3E');margin:0;padding:20px}a{color:blue}table a{color:#0000cd;text-decoration:none}.container{max-width:800px;margin:0 auto;padding:20px;background-color:#fff;border-radius:8px;box-shadow:0 0 10px #0000001a}h1{text-align:center}h1 + p{text-align:center;margin-bottom:40px}.tabs{display:flex;justify-content:center;margin-bottom:40px}.tab-button{padding:10px 20px;margin:0 10px;cursor:pointer;background-color:#007bff;color:#fff;border:none;border-radius:5px}.tab-button:hover{box-shadow:#00000059 0 5px 15px}.tab-button.active{background-color:#0056b3;font-weight:700;box-shadow:#00000059 0 5px 15px}.tab-content{display:none}.tab-content.active{display:block}div.form{display:flex;flex-direction:column;gap:10px}div.form label{font-weight:700}div.form input,div.form select{padding:5px;font-size:1rem;border:1px solid #ccc;border-radius:5px}div.form button{padding:10px;background-color:#28a745;color:#fff;border:none;border-radius:5px;cursor:pointer;margin-top:10px;font-size:20px}div.form button:hover{background-color:#218838}button b{text-shadow:2px 2px #000}code{font-family:Courier Next,courier,monospace;border:1px solid #ddd;background:#f5f5f5;padding:0 .25em}#validationResults{margin-top:20px}table{width:100%;border-collapse:collapse;text-align:center;margin-bottom:20px}table tbody tr td:nth-child(2){text-align:left}table th,table td{padding:10px;border:1px solid #ddd}tfoot td{text-decoration:underline}tfoot{order:1}#errorTable td{background:#fce4e4}#successTable td{background:#dff6dd}.hidden{display:none}textarea{min-height:400px}.form textarea:last-child:empty{display:none}.or-paste{text-align:right}.or-paste span{color:blue;text-decoration:underline;cursor:pointer}.or-paste span:hover{font-weight:700}.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#00000080;justify-content:center;align-items:center}.modal .modal-content{background:#fff;padding:20px;border-radius:8px;max-width:600px;width:90%}.modal textarea{width:100%;height:300px;resize:vertical}.modal .buttons{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}#about img{width:720px;box-shadow:blue 0 0 0 2px inset, rgb(255, 255, 255) 10px -10px 0 -3px, rgb(31, 193, 27) 10px -10px, rgb(255, 255, 255) 20px -20px 0 -3px, rgb(255, 217, 19) 20px -20px, rgb(255, 255, 255) 30px -30px 0 -3px, rgb(255, 156, 85) 30px -30px, rgb(255, 255, 255) 40px -40px 0 -3px, rgb(255, 85, 85) 40px -40px;margin-top:60px;}#about ul{margin-bottom:1rem}</style>
+</head>
+<body>
+<div class="container">
+	<h1>ΔE 2000 Color Difference Calculator</h1>
+	<p>This testing tool based on our
+		<a target="_blank" href="https://github.com/michel-leonard/ciede2000-color-matching/blob/main/ciede-2000.js#L6">JavaScript</a> ΔE 2000 function is not an official CIE application.
+	</p>
+	<!-- Tab Menu -->
+	<div class="tabs">
+		<button class="tab-button" data-tab="generate">Generate CSV File</button>
+		<button class="tab-button" data-tab="validate">Validate CSV File</button>
+		<button class="tab-button" data-tab="solve">Solve CSV File</button>
+		<button class="tab-button active" data-tab="about">About</button>
+	</div>
+
+	<!-- Generate CSV Form -->
+	<div id="generate" class="tab-content">
+		<h2>Generate Test CSV File</h2>
+		<p>Generate a CSV file containing random color samples in <strong>L*a*b* format</strong>, and check that the 7<sup>th</sup> column corresponds to the ΔE*<sub>00</sub> value you've calculated, to an accuracy of 10 decimal places. This week’s <nobr>GitHub Actions</nobr> <a href="https://github.com/michel-leonard/ciede2000-color-matching/actions">workflows</a> should still check that <a href="https://github.com/michel-leonard/ciede2000-color-matching#implementations">implementations</a> pass this test for seed <code id="week-seed">N/A</code>.</p>
+		<div class="form" id="generateForm">
+			<label for="sequenceNumber">Sequence Number (Seed) :</label>
+			<input type="number" id="sequenceNumber" name="sequenceNumber" value="1" required>
+			<label for="sampleCount">Number of Samples (Max: 1,000,000) :</label>
+			<input type="number" id="sampleCount" name="sampleCount" value="1000" min="1" max="1000000" required>
+			<label for="mode-generate">File Contents :</label>
+			<select id="mode-generate">
+				<option value="mode-1">7 columns — two random L* a* b* colors with their ΔE 2000</option>
+				<option value="mode-2">6 columns — two random L* a* b* colors only</option>
+			</select>
+			<label for="compliance-generate">Compliance :</label>
+			<select id="compliance-generate" name="compliance">
+				<option value="simple">Bruce Lindbloom’s implementation (Netflix’s VMAF, ...)</option>
+				<option value="strict">Gaurav Sharma’s implementation (OpenJDK, ...)</option>
+			</select>
+			<label for="separator-generate">CSV Separator :</label>
+			<select id="separator-generate">
+				<option value="comma">Comma (",")</option>
+				<option value="semicolon">Semicolon (";")</option>
+				<option value="tab">Tab</option>
+			</select>
+			<label for="output-method-generator">Output Method :</label>
+			<select id="output-method-generator">
+				<option value="download">Download</option>
+				<option value="textarea">Display</option>
+			</select>
+			<button type="submit" id="generate-csv">Generate CSV</button>
+			<textarea></textarea>
+		</div>
+	</div>
+
+	<!-- Validate CSV Form -->
+	<div id="validate" class="tab-content">
+		<h2>Validate CSV File</h2>
+		<p>The two <strong>L*a*b* colors</strong> found in the first six columns of your data will be compared by the <a href="https://github.com/michel-leonard/ciede2000-color-matching/blob/main/docs/assets/scripts/cie-delta-e-2000.js#L6">ciede_2000</a> function. Any significant differences between my ΔE*<sub>00</sub> calculations and your 7<sup>th</sup> column will be fully detailed.</p>
+		<div class="form" id="validateForm">
+			<label for="fileInput">Select CSV File :</label> <input type="file" id="fileInput" name="fileInput" required>
+			<div class="or-paste">... or paste your text <span>here</span>.</div>
+			<label for="compliance-validate">Compliance :</label>
+			<select id="compliance-validate" name="compliance">
+				<option value="auto">Let the checker automatically select the one that matches...</option>
+				<option value="simple">Bruce Lindbloom’s implementation (Netflix’s VMAF, ...)</option>
+				<option value="strict">Gaurav Sharma’s implementation (OpenJDK, ...)</option>
+			</select>
+			<label for="separator-validate">CSV Separator :</label> <select id="separator-validate">
+			<option value="auto">Let the checker automatically select the one that matches...</option>
+			<option value="comma">Comma (",")</option>
+			<option value="semicolon">Semicolon (";")</option>
+			<option value="tab">Tab</option>
+		</select> <label for="tolerance">Tolerance (ΔE 2000) :</label>
+			<input type="number" id="tolerance" name="tolerance" value="0.0000000001" min="0.0000000000000001" max="0.01">
+			<button type="submit" id="validate-file">Validate CSV</button>
+		</div>
+		<div id="validationResults" class="hidden">
+			<h3>Validation Results</h3>
+			<table id="errorTable" class="hidden">
+				<thead>
+				<tr>
+					<th>#</th>
+					<th>Command</th>
+					<th>Your ΔE 2000</th>
+					<th>Error</th>
+				</tr>
+				</thead>
+				<tbody></tbody>
+				<tfoot></tfoot>
+			</table>
+
+			<table id="successTable" class="hidden">
+				<thead>
+				<tr>
+					<th>#</th>
+					<th>Command</th>
+					<th>Difference</th>
+				</tr>
+				</thead>
+				<tbody></tbody>
+				<tfoot></tfoot>
+			</table>
+		</div>
+	</div>
+
+	<!-- Solve CSV File -->
+	<div id="solve" class="tab-content">
+		<h2>Solve CSV File</h2>
+		<p>Supply a file with rows containing two <strong>L*a*b* colors</strong> (6 columns), and the solver will add, using the compliance variant you have chosen, a new column with the corresponding ΔE2000 values accurate to 10 decimal places.</p>
+		<div class="form" id="solveForm">
+			<label for="fileInput">Select CSV File :</label>
+			<input type="file" id="solveFileInput" name="fileInput" required>
+			<div class="or-paste">... or paste your text <span>here</span>.</div>
+			<label for="compliance-solve">Compliance :</label>
+			<select id="compliance-solve" name="compliance">
+				<option value="simple">Bruce Lindbloom’s implementation (Netflix’s VMAF, ...)</option>
+				<option value="strict">Gaurav Sharma’s implementation (OpenJDK, ...)</option>
+			</select>
+			<label for="separator-solve">CSV Separator :</label> <select id="separator-solve">
+			<option value="auto">Let the solver automatically select the one that matches...</option>
+			<option value="comma">Comma (",")</option>
+			<option value="semicolon">Semicolon (";")</option>
+			<option value="tab">Tab</option>
+		</select> <label for="output-method-solve">Output Method :</label> <select id="output-method-solve">
+			<option value="download">Download</option>
+			<option value="textarea">Display</option>
+		</select>
+			<button type="submit" id="solve-file">Solve CSV</button>
+			<textarea></textarea>
+		</div>
+	</div>
+
+	<!-- About -->
+	<div id="about" class="tab-content active">
+		<h2>About</h2>
+		<p>This tool was created in 2025 to facilitate the development of the Delta E 2000 function. The implementations in our
+			<a href="https://github.com/michel-leonard/ciede2000-color-matching">GitHub Repository</a> are able to reproduce
+			<b>10,000,000</b> samples generated here with an accuracy of <b>1e-10</b>.</p>
+		<img src="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@latest/docs/assets/images/delta-e-2000.jpg" title="To identify the closest or most similar color, ΔE2000 is among the most reliable methods available.">
+		<h2>Classic Browser-Based Applications</h2>
+		<ul>
+			<li><strong>Generators</strong> :
+				<ul>
+					<li>A <a href="https://michel-leonard.github.io/ciede2000-color-matching/discovery-generator.html">discovery generator</a> for quick, small-scale testing and exploration.</li>
+					<li>This <a href="https://michel-leonard.github.io/ciede2000-color-matching#generate">large-scale generator</a> and validator used to test new implementations.</li>
+					<li>A <a href="https://michel-leonard.github.io/ciede2000-color-matching/de2000-rgb-pairs.html">ΔE-to-RGB pairs generator</a> that shows RGB color pairs sharing a given ΔE2000 value (±0.05).</li>
+				</ul>
+			</li>
+			<li><strong>Calculators</strong>:
+				<ul>
+					<li>A <a href="https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html">simple calculator</a> that shows in 10 steps how to compute ΔE2000 between two <strong>L*a*b*</strong> colors.</li>
+					<li>A <a href="https://michel-leonard.github.io/ciede2000-color-matching/rgb-hex-color-calculator.html">pickers-based calculator</a> for computing ΔE2000 between two <strong>RGB</strong> or <strong>Hex</strong> colors.</li>
+				</ul>
+			</li>
+			<li><strong>Other</strong> :
+				<ul>
+					<li>A <a href="https://michel-leonard.github.io/ciede2000-color-matching/color-name-from-image.html">tool</a> that identify the name of the selected color based on a picture.</li>
+				</ul>
+			</li>
+		</ul>
+		<h2>External Links</h2>
+		<ul>
+			<li><a href="https://rosettacode.org/wiki/Color_Difference_CIE_ΔE2000">Rosetta Code</a> invites you to port our ΔE 2000 function to your favorite programming language.</li>
+		</ul>
+	</div>
+</div>
+<div class="modal" id="textModal">
+	<div class="modal-content">
+		<h3>File Contents</h3>
+		<textarea id="userInput" placeholder="Paste your data here..."></textarea>
+		<div class="buttons">
+			<button id="cancelBtn">Cancel</button>
+			<button id="submitBtn">Continue</button>
+		</div>
+	</div>
+</div>
+<script src="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@v1.0.0/docs/assets/scripts/cie-delta-e-2000.js" onerror="this.onerror=null;this.src='./assets/scripts/delta-e-2000.js';"></script>
+<script>
+	const tabs_actions = [...document.querySelectorAll('.tabs .tab-button')]
+	const tabs_contents = [...document.querySelectorAll('.tab-content')]
+	const modal_text = document.getElementById('userInput')
+	{
+		const url = window.location.href.replace(/[#?].*/, '')
+		const start_tab = window.location.href.substring(url.length + 1)
+		const modal = document.getElementById('textModal')
+		const cancelBtn = document.getElementById('cancelBtn')
+		const submitBtn = document.getElementById('submitBtn')
+		for (const el of document.querySelectorAll('.or-paste span'))
+			el.addEventListener('click', () => {
+				modal.style.display = 'flex'
+				modal_text.focus()
+			})
+		submitBtn.addEventListener('click', () => modal.style.display = 'none')
+		cancelBtn.addEventListener('click', () => {
+			modal_text.value = ''
+			modal.style.display = 'none'
+		})
+		for (let i = 0; i < tabs_actions.length; ++i) {
+			tabs_actions[i].addEventListener('click', () => {
+				modal_text.value = ''
+				for (let j = 0; j < tabs_actions.length; ++j) {
+					tabs_actions[j].classList[i === j ? 'add' : 'remove']('active')
+					tabs_contents[j].classList[i === j ? 'add' : 'remove']('active')
+					const txt = tabs_contents[j].querySelector('textarea')
+					if (txt)
+						txt.innerHTML = ''
+				}
+				let uri = url
+				if (tabs_actions[i].dataset.tab !== 'about')
+					uri += '#' + tabs_actions[i].dataset.tab
+				window.history.replaceState(null, '', uri)
+				window.scrollTo(0, 0)
+			})
+			if (start_tab === tabs_actions[i].dataset.tab)
+				tabs_actions[i].click()
+		}
+	}
+
+	function getYearWeek(date) {
+		const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+		d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+		const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+		const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7)
+		return `${d.getUTCFullYear()}${weekNo.toString().padStart(2, '0')}`
+	}
+
+	document.getElementById("week-seed").innerText = getYearWeek(new Date())
+
+	function format_difference(difference) {
+		let message = '' + difference
+		if (/^[0-9].[^e]+e-/.test(message)) {
+			const a = message.split('.')[0], b = message.split('e')[1]
+			return a + 'e<b>' + b + '</b>'
+		}
+		return '<b>' + message + '</b>'
+	}
+
+	function link(l_1, a_1, b_1, l_2, a_2, b_2) {
+		return 'https://michel-leonard.github.io/ciede2000-color-matching/lab-color-calculator.html?L1=' + l_1 + '&a1=' + a_1 + '&b1=' + b_1 + '&L2=' + l_2 + '&a2=' + a_2 + '&b2=' + b_2
+	}
+
+	function with_dots(s) {
+		return s.replaceAll(/([0-9.-]+)(,?)/g, (m, n, c) => {
+			if (/^[0-9-]+$/.test(n))
+				n += '.0'
+			return c === ',' ? n + ', ' : n
+		})
+	}
+
+	function detect_separator(lines) {
+		const sep = [',', 0], map = {}
+		for (let i = lines.length - 1, j = i - 5; j <= i && 0 <= i; --i) {
+			const s = lines[i].replace(/^[^0-9.+-]+/).replace(/[^0-9]+$/).replaceAll(/[0-9Ee.+-]/g, '')
+			for (let c of s)
+				map[c] = 1 + (map[c] || 0)
+		}
+		for (const c in map)
+			if (sep[1] < map[c]) {
+				sep[0] = c
+				sep[1] = map[c]
+			}
+		return sep[0]
+	}
+
+	function exec_validate(text) {
+		if (text.length < 13) {
+			document.querySelector('#validationResults').classList.add('hidden')
+			return
+		}
+		const lines = text.trim().split('\n')
+		const max_error = Number(document.querySelector('#tolerance').value)
+		const k_l = 1.0, k_c = 1.0, k_h = 1.0
+		let compliance_auto = document.querySelector('#compliance-validate').value === "auto"
+		let compliance = document.querySelector('#compliance-validate').value === "strict"
+		const sep_id = document.querySelector('#separator-validate').value
+		const sep = sep_id === 'auto' ? detect_separator(lines) : (sep_id === 'tab' ? '\t' : (sep_id === 'semicolon' ? ';' : ','))
+		document.querySelector('#separator-validate').value = sep === '\t' ? "tab" : sep === ";" ? "semicolon" : sep === "," ? "comma" : "auto"
+		const accepted = [], rejected = [], i_max = lines.length - 10
+		let total_lines = 0, total_success = 0
+		let greatest_in_error = 0, greatest_in_success = 0
+		for (let i = 0; i < lines.length; ++i) {
+			const clear_line = lines[i].trim()
+			if (clear_line !== '') {
+				++total_lines
+				const els = clear_line.split(sep).map(e => Number(e.replaceAll(',', '.')))
+				if (els.length < 7) {
+					if (rejected.length < 10) {
+						rejected.push(['parsing', i + 1, lines[i]])
+					} else
+						break
+				} else if (els.every(isFinite)) {
+					const l_1 = els[0], a_1 = els[1], b_1 = els[2]
+					const l_2 = els[3], a_2 = els[4], b_2 = els[5]
+					const delta_e_submitted = els[6]
+					let delta_e_computed = ciede_2000(l_1, a_1, b_1, l_2, a_2, b_2, k_l, k_c, k_h, compliance)
+					let real_error = Math.abs(delta_e_submitted - delta_e_computed)
+					if (compliance_auto) {
+						const delta_e_other = ciede_2000(l_1, a_1, b_1, l_2, a_2, b_2, k_l, k_c, k_h, !compliance)
+						if (delta_e_other !== delta_e_computed) {
+							const real_error_other = Math.abs(delta_e_submitted - delta_e_other)
+							if (real_error_other < real_error) {
+								[delta_e_computed, real_error, compliance] = [delta_e_other, real_error_other, !compliance]
+							}
+							document.querySelector('#compliance-validate').value = compliance ? "strict" : "simple"
+							compliance_auto = false
+						}
+					}
+					if (max_error < real_error) {
+						if (greatest_in_error < real_error)
+							greatest_in_error = real_error
+						if (rejected.length < 10) {
+							rejected.push([delta_e_computed, i + 1, lines[i]])
+						} else
+							break
+					} else {
+						if (greatest_in_success < real_error)
+							greatest_in_success = real_error
+						++total_success
+						if (i < 10 || i_max < i || Math.random() * lines.length < 10) {
+							accepted.push([delta_e_computed, i + 1, lines[i]])
+						}
+					}
+				} else {
+					if (rejected.length < 10) {
+						rejected.push(['format', i + 1, lines[i]])
+					} else
+						break
+				}
+			}
+		}
+		if (total_lines) {
+			document.querySelector('#validationResults').classList.remove('hidden')
+			const err_tab = document.querySelector('#errorTable')
+			const err_body = err_tab.querySelector('tbody')
+			const err_foot = err_tab.querySelector('tfoot')
+			err_body.innerHTML = ''
+			if (rejected.length) {
+				err_tab.classList.remove('hidden')
+				for (const [arg, i, line] of rejected) {
+					const tr = document.createElement('tr')
+					if (arg === 'format') {
+						tr.innerHTML = '<td colspan="4">Parsing error at line <b>' + i + '</b>: <code>' + line.substring(0, 30) + '</code></td>'
+					} else if (arg === 'parsing') {
+						tr.innerHTML = '<td colspan="4">Format error at line <b>' + i + '</b>: <code>' + line.substring(0, 30) + '</code></td>'
+					} else {
+						const row = line.split(sep).map(e => Number(e.trim().replaceAll(',', '.')))
+						const data = row.slice(0, 6), delta_e_submitted = row[6]
+						const message = format_difference(Math.abs(delta_e_submitted - arg))
+						tr.innerHTML = '<td>' + i + '</td><td><a target="blank" href="' + link(...data) + (compliance ? "&strict=true" : "") + '">ciede_2000</a>(' + with_dots(data.join(',')) + ')</td><td>' + with_dots('' + delta_e_submitted) + '</td><td>' + message + '</td>'
+					}
+					err_body.appendChild(tr)
+				}
+				err_foot.innerHTML = '<tr><td colspan="4">The <b>' + (total_lines - total_success) + '</b> errors found are listed above, with a magnitude up to ' + format_difference(greatest_in_error) + '.</td></tr>'
+			} else {
+				err_tab.classList.add('hidden')
+			}
+
+			const success_tab = document.querySelector('#successTable')
+			const success_body = success_tab.querySelector('tbody')
+			const success_foot = success_tab.querySelector('tfoot')
+			success_body.innerHTML = ''
+			if (accepted.length) {
+				success_tab.classList.remove('hidden')
+				for (const [delta_e_computed, i, line] of accepted) {
+					const tr = document.createElement('tr')
+					const row = line.split(sep).map(e => Number(e.trim()))
+					const data = row.slice(0, 6), delta_e_submitted = row[6]
+					const message = format_difference(Math.abs(delta_e_submitted - delta_e_computed))
+					tr.innerHTML = '<td>' + i + '</td><td><a target="blank" href="' + link(...data) + (compliance ? "&strict=true" : "") + '">ciede_2000</a>(' + with_dots(data.join(',')) + ')</td><td>' + message + '</td>'
+					success_body.appendChild(tr)
+				}
+				success_foot.innerHTML = '<tr><td colspan="3">Success with <b>' + total_success + '</b> exact ΔE 2000 values, given a tolerance ' + format_difference(greatest_in_success) + '.</td></tr>'
+			} else {
+				success_tab.classList.add('hidden')
+			}
+		} else
+			document.querySelector('#validationResults').classList.add('hidden')
+	}
+
+	document.querySelector('#validate-file').addEventListener('click', () => {
+		const file = document.querySelector('#fileInput').files[0]
+		if (file) {
+			const reader = new FileReader()
+			reader.onload = () => exec_validate(reader.result)
+			reader.readAsText(file)
+		} else
+			exec_validate(modal_text.value)
+	})
+
+	class Xorshift {
+		constructor(seed) {
+			this.state = BigInt(seed)
+		}
+
+		next() {
+			this.state ^= (this.state << 13n) & 0xFFFFFFFFFFFFFFFFn
+			this.state ^= (this.state >> 7n) & 0xFFFFFFFFFFFFFFFFn
+			this.state ^= (this.state << 17n) & 0xFFFFFFFFFFFFFFFFn
+			return this.state & 0xFFFFFFFFFFFFFFFFn
+		}
+
+		static magnitudes = [-1e-12, +1e-12, -1.7e-11, +1.7e-11, -2.9e-10, +2.9e-10, -4.9e-9, +4.9e-9, -8.4e-8, +8.4e-8, -1.4e-6, +1.4e-6, -2.4e-5, +2.4e-5, -4.1e-4, +4.1e-4]
+
+		perturb(value, min, max, seed) {
+			if ((seed & 31) === 0) {
+				value += this.constructor.magnitudes[(seed >> 5) & 15] * (1.0 + ((seed >> 9) & 15))
+				if (value < min) value = min; else if (max < value) value = max
+			}
+			return value
+		}
+
+		LabColor() {
+			var x = this.next()
+			var y = Number(x & 16383n); x >>= 16n
+			var z = Number(x & 32767n); x >>= 16n
+			var t = Number(x & 32767n); x = Number(x >> 16n & 511n)
+			var res = [ x & 3 ? y % 101 : x & 4 ? y % 1000 / 10.0 : y % 10000 / 100.0,
+				x & 24 ? z % 257 - 128 : x & 32 ? (z % 2560 - 1280) / 10.0 : (z % 25600 - 12800) / 100.0,
+				x & 192 ? t % 257 - 128 : x & 256 ? (t % 2560 - 1280) / 10.0 : (t % 25600 - 12800) / 100.0 ]
+			x = this.next()
+			res[0] = this.perturb(res[0], 0.0, 100.0, Number(x & 32767n))
+			res[1] = this.perturb(res[1], -128.0, 128.0, Number(x >> 16n & 32767n))
+			res[2] = this.perturb(res[2], -128.0, 128.0, Number(x >> 32n & 32767n))
+			return res
+		}
+
+	}
+
+	function calc_generate_size(){
+		const a = Number(document.querySelector('#sampleCount').value)
+		const b =  document.querySelector('#mode-generate').value === 'mode-1' ? 39.777 : 25.803
+		const c = a * b, d = c < 1024 * 1024 ? `${Math.round(c / 1024.0 * 10.0) / 10.0} KB` : `${Math.round(c / 1048576.0 * 10.0) / 10.0} MB`
+		document.querySelector('#generate-csv').innerHTML = `Generate <b>${d}</b> CSV file`
+	}
+
+	for(const el of document.querySelectorAll('#sampleCount, #mode-generate'))
+		el.addEventListener("input", calc_generate_size)
+
+	document.querySelector('#generate-csv').addEventListener('click', () => {
+		let id = Number(document.querySelector('#sequenceNumber').value)
+		let count = Number(document.querySelector('#sampleCount').value)
+		if (id < 1 || !isFinite(id)) {
+			id = Date.now()
+		}
+		if (count < 1 || !isFinite(count))
+			count = 10
+		if (1000000 < count)
+			count = 1000000
+		document.querySelector('#sequenceNumber').value = id
+		document.querySelector('#sampleCount').value = count
+		id = BigInt(id) ^ 0x2236b69a7d223bdn;
+		for (let i = 0, j = new Xorshift(id); j.next(), i < 64; ++i)
+			id ^= (j.state & 1n) << BigInt(i)
+		const rng = new Xorshift(id)
+		let lines = [ ]
+		const with_delta_e = document.querySelector('#mode-generate').value === 'mode-1'
+		const k_l = 1.0, k_c = 1.0, k_h = 1.0, compliance = document.querySelector('#compliance-generate').value === "strict"
+		const sep_id = document.querySelector('#separator-generate').value
+		const sep = sep_id === 'tab' ? '\t' : (sep_id === 'semicolon' ? ';' : ',')
+		if (with_delta_e)
+			for (let i = 0; i < count; ++i) {
+				const [l1, a1, b1] = rng.LabColor()
+				const [l2, a2, b2] = rng.LabColor()
+				const dE1 = Math.round(ciede_2000(l1, a1, b1, l2, a2, b2, k_l, k_c, k_h, compliance) * 1e10) / 1e10
+				lines.push(`${l1}${sep}${a1}${sep}${b1}${sep}${l2}${sep}${a2}${sep}${b2}${sep}${dE1}`)
+				if (++i < count) {
+					const dE2 = Math.round(ciede_2000(l2, a2, b2, l1, a1, b1, k_l, k_c, k_h, compliance) * 1e10) / 1e10
+					lines.push(`${l2}${sep}${a2}${sep}${b2}${sep}${l1}${sep}${a1}${sep}${b1}${sep}${dE2}`)
+				}
+			} else
+			for (let i = 0; i < count; ++i) {
+				const [l1, a1, b1] = rng.LabColor()
+				const [l2, a2, b2] = rng.LabColor()
+				lines.push(`${l1}${sep}${a1}${sep}${b1}${sep}${l2}${sep}${a2}${sep}${b2}`)
+				if (++i < count)
+					lines.push(`${l2}${sep}${a2}${sep}${b2}${sep}${l1}${sep}${a1}${sep}${b1}`)
+			}
+		lines.push('')
+		lines = lines.join('\n')
+		switch (document.getElementById('output-method-generator').value) {
+			case 'textarea' :
+				const el = document.querySelector('#generateForm textarea')
+				el.innerHTML = lines
+				el.scrollIntoView({behavior: 'smooth'})
+				break
+			case 'download' :
+				const blob = new Blob([lines], {type: 'text/csv'})
+				const link = document.createElement('a')
+				link.href = URL.createObjectURL(blob)
+				link.download = 'ciede2000-tests-' + document.querySelector('#sequenceNumber').value + '.csv'
+				document.body.appendChild(link)
+				link.click()
+				document.body.removeChild(link)
+				break
+		}
+
+	})
+
+	const exec_solve = function (text, file_name) {
+		const k_l = 1.0, k_c = 1.0, k_h = 1.0, compliance = document.querySelector('#compliance-solve').value === "strict"
+		const lines = text.trim().split('\n')
+		const sep_id = document.querySelector('#separator-solve').value
+		const sep = sep_id === 'auto' ? detect_separator(lines) : (sep_id === 'tab' ? '\t' : (sep_id === 'semicolon' ? ';' : ','))
+		document.querySelector('#separator-solve').value = sep === '\t' ? "tab" : sep === ";" ? "semicolon" : sep === "," ? "comma" : "auto"
+		let res = []
+		for (let i = 0; i < lines.length; ++i) {
+			let row = lines[i].split(sep)
+			if (5 < row.length) {
+				row = row.slice(0, 6)
+				const r = row.map(Number)
+				if (r.every(isFinite)) {
+					const delta_e = ciede_2000(r[0], r[1], r[2], r[3], r[4], r[5], k_l, k_c, k_h, compliance)
+					row.push(Math.round(delta_e * 1e10) / 1e10)
+					res.push(row.join(sep))
+				}
+			}
+		}
+		if (res.length) {
+			res.push('')
+			res = res.join('\n')
+			switch (document.getElementById('output-method-solve').value) {
+				case 'textarea' :
+					const el = document.querySelector('#solveForm textarea')
+					el.innerHTML = res
+					el.scrollIntoView({behavior: 'smooth'})
+					break
+				case 'download':
+					const blob = new Blob([res], {type: 'text/plain'})
+					const link = document.createElement('a')
+					link.href = URL.createObjectURL(blob)
+					link.download = file_name.replace(/([^.]+)/, '$1-solved')
+					document.body.appendChild(link)
+					link.click()
+					document.body.removeChild(link)
+					break
+			}
+		}
+	}
+	document.querySelector('#solve-file').addEventListener('click', () => {
+		const file = document.querySelector('#solveFileInput').files[0]
+		if (file) {
+			const reader = new FileReader()
+			reader.onload = () => exec_solve(reader.result, file.name)
+			reader.readAsText(file)
+		} else exec_solve(modal_text.value, 'custom-input.csv')
+	})
+
+	function set_random_sequence() {
+		document.querySelector('#sequenceNumber').value = '' + +(Math.random() + '').slice(2, 2 + 5 + Math.floor(Math.random() * 5))
+	}
+
+	document.querySelector('.tabs .tab-button').addEventListener('click', set_random_sequence)
+	set_random_sequence()
+
+	for(const el of document.querySelectorAll('select'))
+		el.value = el.options[0].value
+
+	for(const el of document.querySelectorAll('input[type=file]'))
+		el.value = ''
+
+	document.querySelector('#sampleCount').value = 1000
+
+	calc_generate_size()
+
+</script>
+</body>
+</html>

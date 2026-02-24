@@ -1,0 +1,94 @@
+name: ΔE2000 against xterm-color-chart in Go
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 54 seconds.
+
+on:
+  schedule:
+    - cron: '38 5 10 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of xterm-color-chart in Go"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/go"
+
+jobs:
+  test-implementation-de00-xterm-color-chart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Go (alternative)
+        run: command -v go > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes go ; }
+
+      - name: 🔧 Initialize the Go source file
+        run: |
+          ####################################################################
+          ######      1. Inject the interoperable function in Go        ######
+          ####################################################################
+          printf '\n%s' 'package main' \
+          'import (' '"fmt"' '"math"' '"math/rand"' '"os"' '"strconv"' ')' \
+          '' \
+          'func sqr(x float64) float64 { return x * x; }' \
+          'type Param struct {' ' KL, KC, Kh float64' '}' \
+          'type LabColor struct {' ' L, A, B float64' '}' \
+          '' \
+          'func ciede_2000_other(l_1, a_1, b_1, l_2, a_2, b_2 float64) float64 {' \
+          '	KLCH := Param{ KL: 1.0, KC: 1.0, Kh: 1.0, }' \
+          '	lab1 := LabColor{ L: l_1, A: a_1, B: b_1, }' \
+          '	lab2 := LabColor{ L: l_2, A: a_2, B: b_2, }' \
+          '' > ciede-2000-vs-xterm-color-chart.go
+
+          url="https://raw.githubusercontent.com/kutuluk/xterm-color-chart"
+          url="$url/1068432d94252b9b4dec447e424f85f712fa16c2/color/color.go"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '286,357p' >> ciede-2000-vs-xterm-color-chart.go
+
+          ####################################################################
+          ######        2. Inject the native function in Go             ######
+          ####################################################################
+          sed -n '/{/,$p' ciede-2000.go >> ciede-2000-vs-xterm-color-chart.go
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          SEED=$(date +%s)
+          printf '%s\n' '' \
+          'func main() {' \
+          '	n_iterations, _ := strconv.Atoi(os.Args[1])' \
+          '	const seed int64 = 0x'$SEED \
+          '	rng := rand.New(rand.NewSource(seed))' \
+          '	max_err := 0.0' \
+          '	l1 := rng.Float64() * 100.0' \
+          '	a1 := rng.Float64() * 256.0 - 128.0' \
+          '	b1 := rng.Float64() * 256.0 - 128.0' \
+          '	for i := 0; i < n_iterations; i++ {' \
+          '		l2 := rng.Float64() * 100.0' \
+          '		a2 := rng.Float64() * 256.0 - 128.0' \
+          '		b2 := rng.Float64() * 256.0 - 128.0' \
+          '		d1 := ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '		d2 := ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '		err := math.Abs(d2 - d1)' \
+          '		if err > max_err {' \
+          '			max_err = err' \
+          '			fmt.Printf("Greatest deviation of %.2e in ΔE2000 at iteration %d.\n", err, i + 1)' \
+          '		}' \
+          '		l1, a1, b1 = l2, a2, b2' \
+          '	}' \
+          '	os.Exit(map[bool]int{false: 1, true: 0}[max_err < 1E-10])' \
+          '}' \
+          '' >> ciede-2000-vs-xterm-color-chart.go
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-xterm-color-chart.go || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Go
+        run: go run ciede-2000-vs-xterm-color-chart.go 100000000

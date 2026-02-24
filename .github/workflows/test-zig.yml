@@ -1,0 +1,73 @@
+name: Zig CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 37 seconds.
+
+on:
+  schedule:
+    - cron: '29 2 22 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in Zig"
+  input_file: "test-cases.csv contains lines like 25,5,120,32.9,-17,105.9 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 25,5,120,32.9,-17,105.9,12.584841442451171665742813456955 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/zig"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-zig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Zig and GCC
+        run: |
+          if ! command -v zig > /dev/null; then
+            # Select the most recent version of Zig
+            ZIG_URL=$(wget --no-verbose --no-check-certificate --timeout=3 --tries=2 'https://ziglang.org/download/index.json' -O- |
+              tr '"' '\n' | grep x86_64-linux | grep ^http | grep download | head -n 1)
+            echo "The most recent URL to download Zig is $ZIG_URL"
+            # Instead, use the Zig version for which the ΔE2000 driver has been designed
+            ZIG_URL='https://github.com/ifreund/zig-tarball-mirror/releases/download/0.15.1/zig-x86_64-linux-0.15.1.tar.xz'
+            echo "The URL used to download Zig is $ZIG_URL"
+            # Download and extract the Zig archive to an appropriate directory
+            sudo rm -rf /opt/zig && mkdir /opt/zig
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$ZIG_URL" -O- | tar -C /opt/zig --strip-components=1 -xJf -
+            # Add Zig to system PATH
+            sudo ln --backup --symbolic --verbose /opt/zig/zig /usr/local/bin/zig
+            # Congratulations, Zig was installed in less than 15 seconds !
+          fi
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in Zig and stream to verifier
+        run: zig version && zig run tests/zig/ciede-2000-driver.zig -O ReleaseFast -- test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

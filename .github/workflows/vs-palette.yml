@@ -1,0 +1,104 @@
+name: ΔE2000 against palette in Rust
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 60 seconds.
+
+on:
+  schedule:
+    - cron: '53 2 11 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of the palette crate in Rust"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/rs"
+
+jobs:
+  test-implementation-de00-palette:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Rust
+        run: |
+          command -v cargo > /dev/null || {
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "https://sh.rustup.rs" -O- |
+            sh -s -- -y --no-modify-path --profile minimal
+            for file in $HOME/.cargo/bin/*; do
+              # Create symbolic links that integrate Rust into the system PATH
+              sudo ln --backup --symbolic --verbose "$(readlink -f "$file")" "/usr/local/bin/${file##*/}"
+            done
+          }
+          rustc --version && cargo --version
+
+      - name: 🔧 Initialize the Rust source file within a Cargo project
+        run: |
+          ###################################################################################
+          #############             1. Use the crate palette             ####################
+          ###################################################################################
+          cargo new ciede-2000-vs-crate-palette
+          cargo add num-traits palette --manifest-path=ciede-2000-vs-crate-palette/Cargo.toml
+
+          printf '%s\n' ''\
+          'use palette::{ color_difference::Ciede2000, Lab, white_point::D65 };' \
+          'use num_traits::Float;' \
+          '' \
+          'fn ciede_2000_other<T: Float>(l1: T, a1: T, b1: T, l2: T, a2: T, b2: T) -> T {' \
+          '	let lab1 = Lab::<D65, f64>::new(l1.to_f64().unwrap(), a1.to_f64().unwrap(), b1.to_f64().unwrap());' \
+          '	let lab2 = Lab::<D65, f64>::new(l2.to_f64().unwrap(), a2.to_f64().unwrap(), b2.to_f64().unwrap());' \
+          '	return T::from(lab1.difference(lab2)).unwrap();' \
+          '}' \
+          '' > ./ciede-2000-vs-crate-palette/src/main.rs
+
+          ###################################################################################
+          #############      2. Inject the native generic function       ####################
+          ###################################################################################
+          cat tests/rs/ciede-2000-generic.rs | sed -n '/ciede_2000/,$p' >>  ./ciede-2000-vs-crate-palette/src/main.rs
+
+          ###################################################################################
+          #############       3. Use random L*a*b* colors to display the        #############
+          #############        greatest deviation between implementations       #############
+          ###################################################################################
+          SEED=$(head -c 8 /dev/urandom | od -An -t x8 | tr -d ' ')
+          printf '%s\n' ''\
+          'fn rand_double(min: f64, max: f64, s: &mut u64) -> f64 {' \
+          '	*s ^= *s << 13; *s ^= *s >> 7; *s ^= *s << 17;' \
+          '	min + (max - min) * (*s as f64 / 18446744073709551616.0)' \
+          '}' \
+          '' \
+          'fn main() {' \
+          '	let args: Vec<String> = std::env::args().collect();' \
+          '	let n_iterations = args[1].parse::<i64>().unwrap();' \
+          '	let mut seed: u64 = 0x'$SEED';' \
+          '	let mut max_err = 0.0;' \
+          '	for i in 0..n_iterations {' \
+          '		let l1 = rand_double(0.0, 1.0, &mut seed);' \
+          '		let a1 = rand_double(-128.0, 128.0, &mut seed);' \
+          '		let b1 = rand_double(-128.0, 128.0, &mut seed);' \
+          '		let l2 = rand_double(0.0, 1.0, &mut seed);' \
+          '		let a2 = rand_double(-128.0, 128.0, &mut seed);' \
+          '		let b2 = rand_double(-128.0, 128.0, &mut seed);' \
+          '		let d1 = ciede_2000::<f64>(l1, a1, b1, l2, a2, b2);' \
+          '		let d2 = ciede_2000_other::<f64>(l1, a1, b1, l2, a2, b2);' \
+          '		let err = (d2 - d1).abs();' \
+          '		if max_err < err {' \
+          '			max_err = err;' \
+          '			println!("Greatest deviation of {:.2e} in color differences at iteration {}.", err, i + 1);' \
+          '		}' \
+          '	}' \
+          '	std::process::exit((1e-10 < max_err) as i32);' \
+          '}' \
+          '' >> ./ciede-2000-vs-crate-palette/src/main.rs
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-crate-palette/src/main.rs || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Rust
+        run: cargo run --manifest-path=ciede-2000-vs-crate-palette/Cargo.toml --release -- 100000000

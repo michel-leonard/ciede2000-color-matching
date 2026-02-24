@@ -1,0 +1,35 @@
+The functions used are those found in "<math.h>" in the C language
+The value 3.14159265358979323846264338328 is assigned to the constant PI
+
+The parameters of the procedure "DeltaE2000" are l_1, a_1, b_1 and l_2, a_2, b_2
+The parametric factors k_l = 1.0, k_c = 1.0, k_h = 1.0 are defined
+n = sqrt(a_1 * a_1 + b_1 * b_1) + sqrt(a_2 * a_2 + b_2 * b_2)
+n = n / 2.0
+n = n * n * n * n * n * n * n
+n = 1.0 + 0.5 * (1.0 - sqrt(n / (n + 6103515625.0)))
+c_1 = sqrt(a_1 * a_1 * n * n + b_1 * b_1)
+c_2 = sqrt(a_2 * a_2 * n * n + b_2 * b_2)
+h_1 = atan2(b_1, a_1 * n)
+h_2 = atan2(b_2, a_2 * n)
+If h_1 < 0.0 then h_1 = h_1 + 2 * PI
+If h_2 < 0.0 then h_2 = h_2 + 2 * PI
+n = abs(h_2 - h_1)
+h_m = (h_1 + h_2) / 2.0
+h_d = (h_2 - h_1) / 2.0
+If n > PI then h_m = h_m + PI
+If n > PI and h_d > 0 then h_d = h_d - PI
+Else if n > PI and h_d <= 0 then h_d = h_d + PI
+p = 36.0 * h_m - 55.0 * PI
+n = (c_1 + c_2) / 2.0
+n = n * n * n * n * n * n * n
+r_t = -2.0 * sqrt(n / (n + 6103515625.0)) * sin(PI / 3.0 * exp(p * p / (-25.0 * PI * PI)))
+n = (l_1 + l_2) / 2.0
+n = (n - 50.0) * (n - 50.0)
+l = (l_2 - l_1) / (k_l * (1.0 + 0.015 * n / sqrt(20.0 + n)))
+t = 1.0 + 0.24 * sin(2.0 * h_m + PI / 2.0) + 0.32 * sin(3.0 * h_m + 8.0 * PI / 15.0) - 0.17 * sin(h_m + PI / 3.0) - 0.20 * sin(4.0 * h_m + 3.0 * PI / 20.0)
+n = c_1 + c_2
+h = 2.0 * sqrt(c_1 * c_2) * sin(h_d) / (k_h * (1.0 + 0.0075 * n * t))
+c = (c_2 - c_1) / (k_c * (1.0 + 0.0225 * n))
+Return the color difference sqrt(l * l + h * h + c * c + c * h * r_t)
+
+As a check, the result of DeltaE2000(32.65, 50.263, -72.25, 36.15, 34.7, -21.25) should be 18.702035669154135

@@ -1,0 +1,98 @@
+name: ΔE2000 against dvisvgm in C++
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 28 seconds.
+
+on:
+  schedule:
+    - cron: '16 4 6 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of dvisvgm in C++"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/cpp"
+
+jobs:
+  test-implementation-de00-dvisvgm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up G++
+        run: command -v g++ > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes g++ ; }
+
+      - name: 🔧 Initialize the C++ source file
+        run: |
+          #################################################################
+          ############     1.  inject the native algorithm     ############
+          #################################################################
+          sed 's/ciede_2000/ciede_2000_1/' ciede-2000.cpp > ciede-2000-vs-dvisvgm.cpp
+
+          #################################################################
+          ############   2.  inject the compared algorithm     ############
+          #################################################################
+          printf '%s\n' '' \
+          'inline double deg2rad(double deg) { return M_PI * deg / 180.0; }' \
+          'inline double sqr(double x) { return x * x; }' \
+          'static double ciede_2000_2(double l1, double a1, double b1, double l2, double a2, double b2) {' \
+          '' >> ciede-2000-vs-dvisvgm.cpp
+
+          url="https://raw.githubusercontent.com/mgieseki/dvisvgm"
+          url="$url/c4f93121c594ced2825ef214e3076b5db013096f/src/Color.cpp"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '741,777p' >> ciede-2000-vs-dvisvgm.cpp
+
+          #################################################################
+          ############       3.  set up a minimal test         ############
+          #################################################################
+          SEED=$(head -c 8 /dev/urandom | od -An -t x8 | tr -d ' ')
+          printf '%s\n' '' \
+          '#include <cstdio>' \
+          '#include <cinttypes>' \
+          '' \
+          'static inline double rand_double(double min, double max, uint64_t *s) {' \
+          '	*s ^= *s << 13, *s ^= *s >> 7, *s ^= *s << 17;' \
+          '	const double res = min + (max - min) * ((double) *s / 18446744073709551616.0);' \
+          '	return res;' \
+          '}' \
+          '' \
+          'int main(int argc, char *argv[]) {' \
+          '	(void)argc;' \
+          '	setbuf(stdout, NULL);' \
+          '	uint64_t seed = 0x'$SEED'ULL;' \
+          '	const int n_iterations = (int) strtol(argv[1], nullptr, 10);' \
+          '	double max_err = 0.0;' \
+          '	for (int i = 0; i < n_iterations; ++i) {' \
+          '		const double l1 = rand_double(0.0, 100.0, &seed);' \
+          '		const double a1 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double b1 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double l2 = rand_double(0.0, 100.0, &seed);' \
+          '		const double a2 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double b2 = rand_double(-128.0, 128.0, &seed);' \
+          '		const double d1 = ciede_2000_1(l1, a1, b1, l2, a2, b2);' \
+          '		const double d2 = ciede_2000_2(l1, a1, b1, l2, a2, b2);' \
+          '		const double err = d1 < d2 ? d2 - d1 : d1 - d2;' \
+          '		if (max_err < err) {' \
+          '			max_err = err;' \
+          '			printf("Greatest deviation of %.2g in color differences at iteration %d.\n", err, i);' \
+          '		}' \
+          '	}' \
+          '	return max_err < 1.0E-10 ? 0 : 1;' \
+          '}' \
+          '' >> ciede-2000-vs-dvisvgm.cpp
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-dvisvgm.cpp || true
+
+      - name: ⚙️ Compile the CIEDE2000 test program in C++
+        run: g++ --version && g++ -std=c++14 -Wall -Wextra -Wpedantic -Ofast -o ciede-2000-vs-dvisvgm ciede-2000-vs-dvisvgm.cpp
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in C++
+        run: ./ciede-2000-vs-dvisvgm 50000000

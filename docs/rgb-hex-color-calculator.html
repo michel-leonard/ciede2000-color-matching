@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Simple Calculator of the ΔE2000 Color Difference in RGB and Hexadecimal</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			text-align: center;
+			margin: 2rem;
+			background-color: #f9f9f9;
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 200 200'%3E%3Cdefs%3E%3Cpattern id='textPattern' patternUnits='userSpaceOnUse' width='200' height='200'%3E%3Ctext x='120' y='50' font-size='20' fill='%23d5d5d5' transform='rotate(40 40 40)' text-anchor='middle' font-family='Arial, sans-serif'%3Ewith ΔE 2000 ...%3C/text%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23textPattern)' /%3E%3C/svg%3E");
+		}
+		h2 {
+			font-size: 20px;
+			width: 320px;
+		}
+		.container {
+			background-color: #fff;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			gap: 2rem;
+			flex-wrap: wrap;
+		}
+		#mid {
+			margin-left:320px;
+			margin-bottom:1rem;
+			background-color: #f9f9f9;
+		}
+		.color-picker {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+		.summary {
+			min-width: 220px;
+			padding: 1rem;
+			border: 2px solid #ccc;
+			border-radius: 8px;
+			background: #f9f9f9;
+		}
+		.rgb_color-sample {
+			width: 50px;
+			height: 50px;
+			border: 1px solid #999;
+			margin-top: 0.5rem;
+			border-radius: 4px;
+		}
+		.color-input {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+		.color-sample {
+			width: 50px;
+			height: 50px;
+			border: 1px solid #999;
+			margin-top: 0.5rem;
+			border-radius: 4px;
+		}
+		button {
+			margin-top: 1rem;
+			padding: 0.5rem 1rem;
+			font-size: 1rem;
+			cursor: pointer;
+		}
+		#dup_1, #dup_2 {
+			background-color: #f9f9f9;
+			border: none;
+			text-decoration: underline;
+		}
+		#dup_1:hover, #dup_2:hover {
+			font-size: .95em;
+			font-weight: bold;
+		}
+		a {
+			color: blue;
+		}
+		input[type='text'] {
+			padding: 0.5rem;
+			width: 100px;
+			text-align: center;
+		}
+	</style>
+</head>
+<body>
+
+<h1>Simple Calculator of the CIE ΔE2000 Color Difference</h1>
+
+<div class="container">
+	<h2>With RGB colors</h2>
+	<div class="color-picker">
+		<label for="rgb_color1">Standard</label>
+		<input type="color" id="rgb_color1" value="#0000ff" />
+		<div id="rgb_sample1" class="rgb_color-sample" style="background:#0000ff"></div>
+		<div id="rgb_def1"></div>
+	</div>
+
+	<div class="summary" id="rgb_summary">
+		<strong>CIE ΔE 2000:</strong> <span id="rgb_deltaE">-</span><br/>
+		<strong>Standard:</strong> <span id="rgb_color1def"></span><br/>
+		<strong>Sample:</strong> <span id="rgb_color2def"></span>
+		<br>
+		<button id="rgb_copyBtn" type="button">Duplicate the standard ➤</button>
+	</div>
+
+	<div class="color-picker">
+		<label for="rgb_color2">Sample</label>
+		<input type="color" id="rgb_color2" value="#483d8b" />
+		<div id="rgb_sample2" class="rgb_color-sample" style="background:#483d8b"></div>
+		<div id="rgb_def2"></div>
+	</div>
+</div>
+
+
+
+<div class="container" id="mid">
+	<button id="dup_1" type="button">Duplicate RGB to Hex ⬇</button>
+	<button id="dup_2" type="button">⬆ Duplicate Hex to RGB</button>
+</div>
+
+<div class="container">
+	<h2>With Hexadecimal Colors</h2>
+	<div class="color-input">
+		<label for="hex_color1">Standard</label>
+		<input type="text" id="hex_color1" placeholder="#0000FF" value="#0000FF" />
+		<div id="hex_sample1" class="color-sample" style="background:#0000FF"></div>
+		<div id="hex_def1"></div>
+	</div>
+
+	<div class="summary" id="hex_summary">
+		<strong>CIE ΔE 2000:</strong> <span id="hex_deltaE">-</span><br/>
+		<strong>Standard:</strong> <span id="hex_color1def"></span><br/>
+		<strong>Sample:</strong> <span id="hex_color2def"></span>
+		<br>
+		<button id="hex_copyBtn" type="button">Duplicate the standard ➤</button>
+	</div>
+
+	<div class="color-input">
+		<label for="hex_color2">Sample</label>
+		<input type="text" id="hex_color2" placeholder="#483D8B" value="#483D8B" />
+		<div id="hex_sample2" class="color-sample" style="background:#483D8B"></div>
+		<div id="hex_def2"></div>
+	</div>
+</div>
+
+<p>Classic Software Engineering Solutions — <a href="https://github.com/michel-leonard/ciede2000-color-matching">GitHub</a> — <a href="https://github.com/michel-leonard/ciede2000-color-matching/tree/main/docs#list-of-pages">Menu</a> — This is not an official CIE application.</p>
+
+<script>
+	// Details of the function : https://github.com/michel-leonard/ciede2000-color-matching#rgb-and-hexadecimal-color-comparison-for-the-web-in-javascript
+	function ciede_2000(a,b,c,d,e,f){"use strict";var k_l=1.0,k_c=1.0,k_h=1.0,g,h,i,j,k,l,m,n,o,p,q,r,s=0.040448236277105097;if(typeof a=='string'){g=parseInt((a.length===4?a[0]+a[1]+a[1]+a[2]+a[2]+a[3]+a[3]:a).substring(1),16);if(typeof b=='string'){h=parseInt((b.length===4?b[0]+b[1]+b[1]+b[2]+b[2]+b[3]+b[3]:b).substring(1),16);d=h>>16&0xff;e=h>>8&0xff;f=h&0xff;}else{f=d;e=c;d=b;}a=g>>16&0xff;b=g>>8&0xff;c=g&0xff}else if(typeof d=='string'){g=parseInt((d.length===4?d[0]+d[1]+d[1]+d[2]+d[2]+d[3]+d[3]:d).substring(1),16);d=g>>16&0xff;e=g>>8&0xff;f=g&0xff;}a/=255.0;b/=255.0;c/=255.0;a=a<s?a/12.92:Math.pow((a+0.055)/1.055,2.4);b=b<s?b/12.92:Math.pow((b+0.055)/1.055,2.4);c=c<s?c/12.92:Math.pow((c+0.055)/1.055,2.4);g=a*41.24564390896921145+b*35.75760776439090507+c*18.04374830853290341;h=a*21.26728514056222474+b*71.51521552878181013+c*7.21749933075596513;i=a*1.93338955823293176+b*11.91919550818385936+c*95.03040770337479886;a=g/95.047;b=h/100.000;c=i/108.883;a=a<216.0/24389.0?((841.0/108.0)*a)+(4.0/29.0):Math.cbrt(a);b=b<216.0/24389.0?((841.0/108.0)*b)+(4.0/29.0):Math.cbrt(b);c=c<216.0/24389.0?((841.0/108.0)*c)+(4.0/29.0):Math.cbrt(c);g=(116.0*b)-16.0;h=500.0*(a-b);i=200.0*(b-c);d/=255.0;e/=255.0;f/=255.0;d=d<s?d/12.92:Math.pow((d+0.055)/1.055,2.4);e=e<s?e/12.92:Math.pow((e+0.055)/1.055,2.4);f=f<s?f/12.92:Math.pow((f+0.055)/1.055,2.4);j=d*41.24564390896921145+e*35.75760776439090507+f*18.04374830853290341;k=d*21.26728514056222474+e*71.51521552878181013+f*7.21749933075596513;l=d*1.93338955823293176+e*11.91919550818385936+f*95.03040770337479886;d=j/95.047;e=k/100.000;f=l/108.883;d=d<216.0/24389.0?((841.0/108.0)*d)+(4.0/29.0):Math.cbrt(d);e=e<216.0/24389.0?((841.0/108.0)*e)+(4.0/29.0):Math.cbrt(e);f=f<216.0/24389.0?((841.0/108.0)*f)+(4.0/29.0):Math.cbrt(f);j=(116.0*e)-16.0;k=500.0*(d-e);l=200.0*(e-f);d=(Math.hypot(h,i)+Math.hypot(k,l))*0.5;d=d*d*d*d*d*d*d;d=1.0+0.5*(1.0-Math.sqrt(d/(d+6103515625.0)));m=Math.hypot(h*d,i);n=Math.hypot(k*d,l);o=Math.atan2(i,h*d);p=Math.atan2(l,k*d);o+=2.0*Math.PI*(o<0.0);p+=2.0*Math.PI*(p<0.0);d=Math.abs(p-o);if(Math.PI-1E-14<d&&d<Math.PI+1E-14)d=Math.PI;q=(o+p)*0.5;r=(p-o)*0.5;if(Math.PI<d){if(0.0<r)r-=Math.PI;else r+=Math.PI;q+=Math.PI;}e=36.0*q-55.0*Math.PI;d=(m+n)*0.5;d=d*d*d*d*d*d*d;s=-2.0*Math.sqrt(d/(d+6103515625.0))*Math.sin(Math.PI/3.0*Math.exp(e*e/(-25.0*Math.PI*Math.PI)));d=(g+j)*0.5;d=(d-50.0)*(d-50.0);f=(j-g)/(k_l*(1.0+0.015*d/Math.sqrt(20.0+d)));a=1.0+0.24*Math.sin(2.0*q+Math.PI*0.5)+0.32*Math.sin(3.0*q+8.0*Math.PI/15.0)-0.17*Math.sin(q+Math.PI/3.0)-0.20*Math.sin(4.0*q+3.0*Math.PI/20.0);d=m+n;b=2.0*Math.sqrt(m*n)*Math.sin(r)/(k_h*(1.0+0.0075*d*a));c=(n-m)/(k_c*(1.0+0.0225*d));return Math.sqrt(f*f+b*b+c*c+c*b*s);}
+
+	const rgb_c1 = document.getElementById('rgb_color1');
+	const rgb_c2 = document.getElementById('rgb_color2');
+	const rgb_delta_e = document.getElementById('rgb_deltaE');
+	const rgb_def_1 = document.getElementById('rgb_color1def');
+	const rgb_def_2 = document.getElementById('rgb_color2def');
+	const rgb_sample_1 = document.getElementById('rgb_sample1');
+	const rgb_sample_2 = document.getElementById('rgb_sample2');
+	const rgb_copy = document.getElementById('rgb_copyBtn');
+	const hex_regex = /^#?((?:[0-9a-fA-F]{3}){1,2})$/;
+	const hex_c1 = document.getElementById('hex_color1');
+	const hex_c2 = document.getElementById('hex_color2');
+	const hex_delta_e = document.getElementById('hex_deltaE');
+	const hex_def_1 = document.getElementById('hex_color1def');
+	const hex_def_2 = document.getElementById('hex_color2def');
+	const hex_sample_1 = document.getElementById('hex_sample1');
+	const hex_sample_2 = document.getElementById('hex_sample2');
+	const hex_copy = document.getElementById('hex_copyBtn');
+
+	function hex_to_rgb(hex) {
+		if(hex.length === 4) {
+			hex = "#" + hex[1]+hex[1] + hex[2]+hex[2] + hex[3]+hex[3];
+		}
+		const bigint = parseInt(hex.slice(1), 16);
+		return {
+			r: (bigint >> 16) & 255,
+			g: (bigint >> 8) & 255,
+			b: bigint & 255
+		};
+	}
+
+	function update_rgb_ctx() {
+		const hex_1 = rgb_c1.value;
+		const hex_2 = rgb_c2.value;
+
+		rgb_sample_1.style.backgroundColor = hex_1;
+		rgb_sample_2.style.backgroundColor = hex_2;
+
+		rgb_def_1.textContent = hex_1 + " (Hex)";
+		rgb_def_2.textContent = hex_2 + " (Hex)";
+
+		const delta = ciede_2000(hex_1, hex_2);
+		rgb_delta_e.textContent = delta.toFixed(2);
+	}
+
+	rgb_copy.addEventListener('click', () => {
+		rgb_c2.value = rgb_c1.value;
+		update_rgb_ctx();
+	});
+
+	function hex_normalize(hex) {
+		const match = hex_regex.exec(hex.trim());
+		if (!match) return null;
+		return match[1].length === 3
+				? "#" + [...match[1]].map(c => c + c).join("")
+				: "#" + match[1].toUpperCase();
+	}
+
+	function update_hex_ctx() {
+		const hex_1 = hex_normalize(hex_c1.value);
+		const hex_2 = hex_normalize(hex_c2.value);
+
+		if (hex_1) {
+			hex_sample_1.style.backgroundColor = hex_1;
+			hex_def_1.textContent = hex_1 + " (Hex)";
+		} else {
+			hex_sample_1.style.backgroundColor = "#fff";
+			hex_def_1.textContent = "Invalid";
+		}
+
+		if (hex_2) {
+			hex_sample_2.style.backgroundColor = hex_2;
+			hex_def_2.textContent = hex_2 + " (Hex)";
+		} else {
+			hex_sample_2.style.backgroundColor = "#fff";
+			hex_def_2.textContent = "Invalid";
+		}
+
+		if (hex_1 && hex_2) {
+			const delta = ciede_2000(hex_1, hex_2);
+			hex_delta_e.textContent = delta.toFixed(2);
+		} else {
+			hex_delta_e.textContent = "-";
+		}
+	}
+
+	hex_copy.addEventListener('click', () => {
+		const hex_1 = hex_normalize(hex_c1.value);
+		if (hex_1) {
+			hex_c2.value = hex_1;
+			update_hex_ctx();
+		}
+	});
+
+	document.getElementById('dup_1').addEventListener('click', () => {
+		hex_c1.value = rgb_c1.value
+		hex_c2.value = rgb_c2.value
+		update_hex_ctx()
+	})
+	document.getElementById('dup_2').addEventListener('click', () => {
+		const v_1 = hex_normalize(hex_c1.value)
+		const v_2 = hex_normalize(hex_c2.value)
+		if (v_1 && v_2) {
+			rgb_c1.value = v_1
+			rgb_c2.value = v_2
+			update_rgb_ctx()
+		}
+	})
+
+	rgb_c1.addEventListener('input', update_rgb_ctx);
+	rgb_c2.addEventListener('input', update_rgb_ctx);
+	hex_c1.addEventListener('input', update_hex_ctx);
+	hex_c2.addEventListener('input', update_hex_ctx);
+
+	update_rgb_ctx();
+	update_hex_ctx();
+
+</script>
+
+</body>
+</html>

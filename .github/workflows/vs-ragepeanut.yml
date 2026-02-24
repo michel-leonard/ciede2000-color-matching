@@ -1,0 +1,103 @@
+name: ΔE2000 against delta_e in Dart
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 48 seconds.
+
+on:
+  schedule:
+    - cron: '51 2 13 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of delta_e in Dart"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/dart"
+
+jobs:
+  test-implementation-de00-ragepeanut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Dart (alternative)
+        run: |
+          if ! command -v dart > /dev/null; then
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=2 https://dl-ssl.google.com/linux/linux_signing_key.pub -O- | sudo gpg --dearmor -o /usr/share/keyrings/dart.gpg
+            echo "deb [signed-by=/usr/share/keyrings/dart.gpg]" "https://storage.googleapis.com/download.dartlang.org/linux/debian stable main" |
+            sudo tee /etc/apt/sources.list.d/dart_stable.list
+            sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes dart
+            # sudo ln -s /usr/lib/dart/bin/dart /usr/local/bin/dart
+            echo "/usr/lib/dart/bin" >> $GITHUB_PATH
+          fi
+
+      - name: 🔧 Initialize the Dart source file
+        run: |
+          ####################################################################
+          ######        1. Inject the native function in Dart           ######
+          ####################################################################
+          printf '%s\n' '' \
+          'import "dart:io";' \
+          '' > ciede-2000-vs-delta-e.dart
+
+          cat ciede-2000.dart >> ciede-2000-vs-delta-e.dart
+
+          ####################################################################
+          ######     2. Inject the interoperable function in Dart       ######
+          ####################################################################
+          printf '%s\n' '' \
+          'class LabColor {' \
+          '	final double l;' \
+          '	final double a;' \
+          '	final double b;' \
+          '	LabColor(this.l, this.a, this.b);' \
+          '}' \
+          'double ciede_2000_other(double l_1, double a_1, double b_1, double l_2, double a_2, double b_2) {' \
+          '	LabColor lab1 = LabColor(l_1, a_1, b_1);' \
+          '	LabColor lab2 = LabColor(l_2, a_2, b_2);' \
+          '	LabColor weights = LabColor(1.0, 1.0, 1.0);' \
+          '' >> ciede-2000-vs-delta-e.dart
+
+          url="https://raw.githubusercontent.com/RagePeanut/DeltaE"
+          url="$url/c7bb1581b08818ba24ab00dd33a61dc958e0e4b2/lib/delta_e.dart"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '89,175p' >> ciede-2000-vs-delta-e.dart
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          'void main(List<String> arguments) {' \
+          '	final n_iterations = arguments.isNotEmpty ? int.tryParse(arguments[0]) ?? 10000 : 10000;' \
+          '	double max_err = 0.0;' \
+          '	final rand = Random();' \
+          '	for (var i = 0; i < n_iterations; i++) {' \
+          '		final l1 = rand.nextDouble() * 100.0;' \
+          '		final a1 = rand.nextDouble() * 256.0 - 128.0;' \
+          '		final b1 = rand.nextDouble() * 256.0 - 128.0;' \
+          '		final l2 = rand.nextDouble() * 100.0;' \
+          '		final a2 = rand.nextDouble() * 256.0 - 128.0;' \
+          '		final b2 = rand.nextDouble() * 256.0 - 128.0;' \
+          '		final d1 = ciede_2000(l1, a1, b1, l2, a2, b2);' \
+          '		final d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2);' \
+          '		final err = (d2 - d1).abs();' \
+          '		if (err > max_err) {' \
+          '			max_err = err;' \
+          '			print("Greatest deviation of ${err.toStringAsExponential(2)} in color differences at iteration ${i + 1}");' \
+          '		}' \
+          '	}' \
+          '	exit(max_err < 1e-10 ? 0 : 1);' \
+          '}' \
+          '' >> ciede-2000-vs-delta-e.dart
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-delta-e.dart || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in Dart
+        run: dart --version && dart ciede-2000-vs-delta-e.dart 50000000
