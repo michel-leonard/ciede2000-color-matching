@@ -1,0 +1,100 @@
+name: TypeScript CIEDE2000 Testing
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 64 seconds.
+
+on:
+  schedule:
+    - cron: '58 2 27 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in TypeScript"
+  input_file: "test-cases.csv contains lines like 68.6,4,50,95,-7,43.9 representing two L*a*b* colors"
+  process:  "Print the line with its Delta E like 68.6,4,50,95,-7,43.9,19.618939587811927462685636571476 for each line"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/ts"
+  n_csv_lines: 10000000
+
+jobs:
+  test-implementation-de00-ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Node, npm, TypeScript and GCC
+        run: |
+          command -v node > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes nodejs npm ; }
+          command -v tsc > /dev/null || {
+            MAJOR_VERSION=$(npm view typescript versions | awk 'match($0,/[0-9]+/,m){v=m[0]}END{print v-1}')
+            npm install --global typescript@$MAJOR_VERSION
+          }
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: 🔧 Create package.json
+        run: |
+          TYPESCRIPT_MAJOR_VERSION=$(tsc --version | awk 'match($0,/[0-9]+/,m){print m[0];exit}')
+          NODE_MAJOR_VERSION=$(node --version | awk 'match($0,/[0-9]+/,m){print m[0];exit}')
+          printf '%s\n' \
+          '{' \
+          '  "name": "delta-e-2000-ts",' \
+          '  "version": "1.0.0",' \
+          '  "type": "commonjs",' \
+          '  "scripts": {' \
+          '    "build": "tsc",' \
+          '    "start": "node dist/ciede-2000-driver.js"' \
+          '  },' \
+          '  "devDependencies": {' \
+          '    "typescript": "^'$TYPESCRIPT_MAJOR_VERSION'",' \
+          '    "@types/node": "^'$NODE_MAJOR_VERSION'"' \
+          '  }' \
+          '}' > package.json
+          # Display newly created file
+          cat package.json
+
+      - name: 🔧 Create tsconfig.json
+        run: |
+          printf '%s\n' '{' \
+          '  "compilerOptions": {' \
+          '    "module": "CommonJS",' \
+          '    "strict": true,' \
+          '    "esModuleInterop": true,' \
+          '    "outDir": "dist",' \
+          '    "types": ["node"]' \
+          '  },' \
+          '  "include": ["tests/ts/ciede-2000-driver.ts"]' \
+          '}' > tsconfig.json
+
+      - name: ⚙️ Install dependencies and compile TypeScript
+        run: tsc --version && node --version && npm --version && npm install --no-audit && npm run build &
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines --output-file test-cases.csv
+
+      - name: 🚀 Run test cases in TypeScript and stream to verifier
+        run: node dist/ciede-2000-driver.js test-cases.csv | ./ciede-2000-driver -o summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

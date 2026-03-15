@@ -1,0 +1,111 @@
+name: JavaScript CIEDE2000 Testing (multiprecision)
+
+on:
+  schedule:
+    - cron: '8 2 1 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard implements the CIE2000 color difference formula in JavaScript and Julia"
+  related_url_1: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/js"
+  related_url_2: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/jl"
+  n_csv_lines: 100000
+  decimal_digits: 30
+
+jobs:
+  test-implementation-de00-js-multiprecision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Node and GCC
+        run: |
+          command -v node > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes nodejs ; }
+          command -v gcc > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes gcc ; }
+
+      - name: ⚙️ Compile the CIEDE2000 driver program in C99
+        run: gcc --version && gcc -std=c99 -Wall -pedantic -O2 -g tests/c/ciede-2000-driver.c -o ciede-2000-driver -lm
+
+      - name: 📑 Display help for the authoritative test software
+        run: ./ciede-2000-driver --help
+
+      - name: 🎨 Generate ΔE2000 color difference test cases
+        run: |
+          # Splits the large file into as many smaller files as there are vCPUs
+          n_cpu=$(nproc) && ./ciede-2000-driver --rand-seed $(date +'%Y%V') --generate $n_csv_lines |
+          split --unbuffered --lines=$(( ($n_csv_lines + $n_cpu - 1) / $n_cpu )) --numeric-suffixes=1 --additional-suffix=.csv - test-cases-
+          # Shows the name, size and first line of newly created files
+          du -h test-cases-* | awk '{getline line < $2; print $2, "(" $1 "B) contains L*a*b* color pairs for vCPU " NR ", first values =", line}'
+
+      - name: 🔧 Initialize the JavaScript source file
+        run: |
+          printf '%s\n' 'import fs from "fs";' \
+          'import readline from "readline";' \
+          'let precision = 40, canonical = false, inputFile = null;' \
+          'for (let arg of process.argv.slice(2)) {' \
+          '	if (arg.startsWith("--precision="))' \
+          '		precision = parseInt(arg.split("=")[1], 10);' \
+          '	else if (arg === "--canonical")' \
+          '		canonical = true;' \
+          '	else if (!arg.startsWith("--"))' \
+          '		inputFile = arg;' \
+          '}' \
+          'if (!inputFile) {' \
+          '	console.error("Usage: node " + process.argv[1] + " [--precision=N] [--canonical] file.csv");' \
+          '	process.exit(1);' \
+          '}' \
+          '' > testing.js
+          
+          cat tests/js/ciede-2000-multiprecision.js >> testing.js
+          
+          printf '%s\n' '' \
+          'const ciede_2000_arbitrary = get_ciede_2000_arbitrary(precision),' \
+          'rl = readline.createInterface({' \
+          '	input: fs.createReadStream(inputFile),' \
+          '	crlfDelay: Infinity' \
+          '});' \
+          'rl.on("line", (line) => {' \
+          '	if (line = line.trim()) {' \
+          '		const p = line.split(",");' \
+          '		let result;' \
+          '		if (p.length == 6)' \
+          '			result = ciede_2000_arbitrary(p[0], p[1], p[2], p[3], p[4], p[5], 1, 1, 1, canonical);' \
+          '		else if (p.length == 9)' \
+          '			result = ciede_2000_arbitrary(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], canonical);' \
+          '		else' \
+          '			return;' \
+          '		process.stdout.write(line + "," + result + "\n");' \
+          '	}' \
+          '});' >> testing.js
+
+      - name: ⚡ Solves test cases in parallel, calculating ΔE2000 with high-precision in JavaScript
+        run: |
+          for file in test-cases-*; do
+              node testing.js $file --precision=$(( 5 + $decimal_digits )) > solved-$file &
+              echo "Processes $file ($(wc -l < $file) lines) in parallel ➤ solved-$file"
+          done
+          wait
+
+      - name: 🚀 Check that Julia’s generic high-precision calculations matches JavaScript
+        run: cat solved-* | julia tests/jl/ciede-2000-driver.jl --tolerance 1e-$decimal_digits > summary.txt
+
+      - name: 🔍 Display verification output
+        run: cat summary.txt
+
+      - name: 🏁 Conclusion
+        run: |
+          if grep -q "Errors : 0" summary.txt && grep -q "Successes : $n_csv_lines" summary.txt; then
+            echo "✔️ Verification successful: all $n_csv_lines color differences were correctly calculated."
+          else
+            echo "❌ Verification failed. See above for details."
+            exit 1
+          fi

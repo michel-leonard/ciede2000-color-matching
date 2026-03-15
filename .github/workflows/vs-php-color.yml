@@ -1,0 +1,89 @@
+name: ΔE2000 against color in PHP
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 37 seconds.
+
+on:
+  schedule:
+    - cron: '46 3 3 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of spatie/color in PHP"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/php"
+
+jobs:
+  test-implementation-de00-php-color:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up PHP (alternative)
+        run: command -v php > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes php-cli ; }
+
+      - name: 🔧 Initialize the PHP source file
+        run: |
+          ####################################################################
+          ######        1. Inject the native function in PHP            ######
+          ####################################################################
+          cat ciede-2000.php > ciede-2000-vs-color.php
+
+          ####################################################################
+          ######     2. Inject the interoperable function in PHP        ######
+          ####################################################################
+          printf '%s\n' '' \
+          'function ciede_2000_other($l1, $a1, $b1, $l2, $a2, $b2) {' \
+          '' >> ciede-2000-vs-color.php
+
+          url="https://raw.githubusercontent.com/spatie/color"
+          url="$url/a5613147cf4689939ad46f3a720a23119aa4497d/src/Distance.php"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '103,154p' >> ciede-2000-vs-color.php
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          '$n_iterations = (int)($argv[1] ?? 10000);' \
+          '$max_err = 0.0;' \
+          'for($i = 0; $i < $n_iterations; ++$i) {' \
+          '	$l1 = mt_rand() / mt_getrandmax() * 100.0 ;' \
+          '	$a1 = mt_rand() / mt_getrandmax() * 256.0 - 128.0;' \
+          '	$b1 = mt_rand() / mt_getrandmax() * 256.0 - 128.0;' \
+          '	$l2 = mt_rand() / mt_getrandmax() * 100.0;' \
+          '	$a2 = mt_rand() / mt_getrandmax() * 256.0 - 128.0;' \
+          '	$b2 = mt_rand() / mt_getrandmax() * 256.0 - 128.0;' \
+          '	$d1 = ciede_2000($l1, $a1, $b1, $l2, $a2, $b2);' \
+          '	$d2 = ciede_2000_other($l1, $a1, $b1, $l2, $a2, $b2);' \
+          '	$err = abs($d2 - $d1);' \
+          '	if ($max_err < $err){' \
+          '		$max_err = $err ;' \
+          '		printf("Greatest deviation of %.2e in ΔE2000 at iteration %d.\n", $err, 1 + $i);' \
+          '	}' \
+          '}' \
+          'exit($max_err < 1E-10 ? 0 : 1);' \
+          '' >> ciede-2000-vs-color.php
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-color.php || true
+
+      - name: 🛠️ Create custom php.ini
+        run: |
+          printf "%s\n" \
+          "zend_extension=opcache.so" \
+          "opcache.enable=1" \
+          "opcache.enable_cli=1" \
+          "opcache.jit=1235" \
+          "opcache.jit_buffer_size=32M" \
+          "memory_limit=64M" > custom-php.ini
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in PHP
+        run: php -v && php -n -c custom-php.ini ciede-2000-vs-color.php 10000000

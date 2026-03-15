@@ -1,0 +1,102 @@
+name: ΔE2000 against Shopify in Kotlin
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 53 seconds.
+
+on:
+  schedule:
+    - cron: '37 2 21 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of Shopify in Kotlin"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/kt"
+
+jobs:
+  test-implementation-de00-shopify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Kotlin and Java
+        run: |
+          if ! command -v kotlinc > /dev/null; then
+            wget --no-verbose --no-check-certificate --timeout=5 --tries=3 https://get.sdkman.io -O- | bash
+            printf '%s\n' \
+              "sdkman_auto_answer=true" \
+              "sdkman_auto_selfupdate=true" > "$HOME/.sdkman/etc/config"
+            source "$HOME/.sdkman/bin/sdkman-init.sh"
+            sdk install kotlin
+          fi
+          command -v java > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes default-jdk; }
+
+      - name: 🔧 Initialize the Kotlin source file
+        run: |
+          ####################################################################
+          ######      1. Inject the native function in Kotlin           ######
+          ####################################################################
+          printf '%s\n' '' \
+          'import kotlin.random.Random' \
+          'import kotlin.system.exitProcess' \
+          '' > ciede-2000-vs-shopfiy.kt
+
+          cat ciede-2000.kt >> ciede-2000-vs-shopfiy.kt
+
+          ####################################################################
+          ######    2. Inject the interoperable function in Kotlin      ######
+          ####################################################################
+          printf '%s\n' '' \
+          'fun ciede_2000_other(L1: Double, a1: Double, b1: Double, L2: Double, a2: Double, b2: Double): Double {' \
+          '	val KL = 1.0' \
+          '	val KC = 1.0' \
+          '	val KH = 1.0' \
+          '' >> ciede-2000-vs-shopfiy.kt
+
+          url="https://raw.githubusercontent.com/ndtp/android-testify/be434b6ed1784945e7acf12f075ecfcc97da2585"
+          url="$url/Library/src/main/java/dev/testify/core/processor/compare/colorspace/DeltaE.kt"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '63,123p' >> ciede-2000-vs-shopfiy.kt
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          'fun main(args: Array<String>) {' \
+          '	val n_iterations = if (args.isNotEmpty()) args[0].toIntOrNull() ?: 10000 else 10000' \
+          '	var max_err = 0.0' \
+          '	repeat(n_iterations) { i ->' \
+          '		val l1 = Random.nextDouble() * 100.0' \
+          '		val a1 = Random.nextDouble() * 256.0 - 128.0' \
+          '		val b1 = Random.nextDouble() * 256.0 - 128.0' \
+          '		val l2 = Random.nextDouble() * 100.0' \
+          '		val a2 = Random.nextDouble() * 256.0 - 128.0' \
+          '		val b2 = Random.nextDouble() * 256.0 - 128.0' \
+          '		val d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '		val d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '		val err = abs(d2 - d1)' \
+          '		if (err > max_err) {' \
+          '			max_err = err' \
+          '			System.out.printf("Greatest deviation of %.2e in color differences at iteration %d.\n", err, i + 1)' \
+          '			System.out.flush()' \
+          '		}' \
+          '	}' \
+          '	exitProcess(if (max_err < 1E-10) 0 else 1)' \
+          '}' \
+          '' >> ciede-2000-vs-shopfiy.kt
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-shopfiy.kt || true
+
+      - name: ⚙️ Compile Kotlin file
+        run: kotlinc -version && kotlinc ciede-2000-vs-shopfiy.kt -include-runtime -d ciede-2000-vs-shopfiy.jar
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Kotlin
+        run: java -version && java -jar ciede-2000-vs-shopfiy.jar 50000000

@@ -1,0 +1,81 @@
+name: ΔE2000 against chroma in JavaScript
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 76 seconds.
+
+on:
+  schedule:
+    - cron: '51 3 20 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of chroma in JavaScript"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/js"
+
+jobs:
+  test-implementation-de00-chroma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Node
+        run: command -v node > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes nodejs ; }
+
+      - name: 🔧 Initialize the JavaScript source file with Chroma.js
+        run: |
+          #################################################################
+          ##############         1.  write the header        ##############
+          #################################################################
+
+          printf '%s\n' 'const { sqrt, pow, min, max, atan2, abs, cos, sin, exp, PI } = Math;' \
+          'const rad2deg = x => x / PI * 180.0' \
+          'const deg2rad = x => x * PI / 180.0' \
+          'function ciede_2000_chroma (L1, a1, b1, L2, a2, b2, Kl = 1, Kc = 1, Kh = 1) {' \
+          '' > delta-e-2000-vs-chroma.js
+
+          #################################################################
+          ############      2.  inject compared algorithm      ############
+          #################################################################
+          url="https://raw.githubusercontent.com/gka/chroma.js/fdab658c5013a924db2cc9c89d9ac1d7d1382cd9/src/utils/delta-e.js"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '/avgL/, / );$/p' >> delta-e-2000-vs-chroma.js
+
+          printf '\n%s\n' 'return result}' >> delta-e-2000-vs-chroma.js
+
+          #################################################################
+          ############     3.  inject reference algorithm      ############
+          #################################################################
+          cat ciede-2000.js >> delta-e-2000-vs-chroma.js
+
+          #################################################################
+          ############       4.  set up a minimal test         ############
+          #################################################################
+          printf '%s\n' 'let arg = 1 < process.argv.length ? parseInt(process.argv[2], 10) : 10000' \
+          'const n_iterations = isFinite(arg) && 0 < arg ? arg : 10000' \
+          'let max_err = 0.0' \
+          'let l1 = Math.random() * 100.0, a1 = Math.random() * 256.0 - 128.0, b1 = Math.random() * 256.0 - 128.0' \
+          'for (let i = 0; i < n_iterations; ++i) {' \
+          '	let l2 = Math.random() * 100.0, a2 = Math.random() * 256.0 - 128.0, b2 = Math.random() * 256.0 - 128.0' \
+          '	const d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '	const d2 = ciede_2000_chroma(l1, a1, b1, l2, a2, b2)' \
+          '	const err = Math.abs(d2 - d1)' \
+          '	if (max_err < err)' \
+          '		max_err = err' \
+          '		; [l1, a1, b1] = [l2, a2, b2]' \
+          '}' \
+          'const s_1 = max_err.toExponential(2), s_2 = max_err < 1E-10 ? "PASSED" : "FAILED"' \
+          'console.log(`The largest deviation measured after ${n_iterations} calculations is ${s_1} so this test is ${s_2}.`)' \
+          'process.exit(s_2 === "PASSED" ? 0 : 1)' >> delta-e-2000-vs-chroma.js
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@delta-e-2000-vs-chroma.js || true
+
+      - name: 🚀 Execute a large amount of ΔE2000 test cases in JavaScript
+        run: node delta-e-2000-vs-chroma.js 100000000

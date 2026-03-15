@@ -1,0 +1,91 @@
+name: ΔE2000 against ijp-color in Scala
+
+# During summer 2025, this workflow was tested on several weekends and completed successfully in 40 seconds.
+
+on:
+  schedule:
+    - cron: '27 5 28 * *'
+  workflow_dispatch:
+
+env:
+  description: "Automated Testing — Michel Leonard checks its ΔE2000 calculations against those of spatie/color in Scala"
+  related_url: "https://github.com/michel-leonard/ciede2000-color-matching/tree/main/tests/scala"
+
+jobs:
+  test-implementation-de00-ijp-color:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📂 For each step below, a new shell will be started at the repository root
+        uses: actions/checkout@v6
+
+      - name: 👉 Disable the user manual database, which is not needed in this CI/CD workflow
+        run: sudo ln --backup --symbolic --verbose $(which true) $(which mandb)
+
+      - name: 👉 Set up a less crowded server for the APT package manager (step disabled, but useful when an installation is slow)
+        run: true || grep -Flr '.ubuntu.com' /etc/apt | xargs sudo sed -i 's|[^/]\+ubuntu.com|mirrors.maine.edu|g'
+
+      - name: 📦 Set up Scala
+        run: command -v scalac > /dev/null || { sudo apt-get update --allow-unauthenticated && sudo apt-get install --allow-unauthenticated --no-install-recommends --assume-yes scala ; }
+
+      - name: 🔧 Initialize the Scala source file
+        run: |
+          ####################################################################
+          ######       1. Inject the native function in Scala           ######
+          ####################################################################
+          printf '%s\n' '' \
+          'object Main extends App {' \
+          '' > ciede-2000-vs-ijp-color.scala
+
+          cat ciede-2000.scala >> ciede-2000-vs-ijp-color.scala
+
+          ####################################################################
+          ######    2. Inject the interoperable function in Scala       ######
+          ####################################################################
+          printf '%s\n' '' \
+          'case class Lab(l: Double, a: Double, b: Double)' \
+          'def ciede_2000_other(l_1: Double, a_1: Double, b_1: Double, l_2: Double, a_2: Double, b_2: Double): Double = {' \
+          '	val (lab1, lab2) = (Lab(l_1, a_1, b_1), Lab(l_2, a_2, b_2))' \
+          '	val (kL, kC, kH) = (1.0, 1.0, 1.0)' \
+          '' >> ciede-2000-vs-ijp-color.scala
+
+          url="https://raw.githubusercontent.com/ij-plugins/ijp-color"
+          url="$url/4124a820ed0dfdf2b48d1c7a6b23185a7ded8b7e/ijp-color/src/main/scala/ij_plugins/color/DeltaE.scala"
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 "$url" -O- | sed -n '211,264p' >> ciede-2000-vs-ijp-color.scala
+
+          ####################################################################
+          ######           3. Generate random L*a*b* colors             ######
+          ######              and display ΔE2000 deviations             ######
+          ####################################################################
+          printf '%s\n' '' \
+          '	val n_iterations: Int = args(0).toInt' \
+          '	var max_err: Double = 0.0' \
+          '	val rand = new scala.util.Random()' \
+          '	for (i <- 0 until n_iterations) {' \
+          '		val l1 = rand.nextDouble() * 100.0' \
+          '		val a1 = rand.nextDouble() * 256.0 - 128.0' \
+          '		val b1 = rand.nextDouble() * 256.0 - 128.0' \
+          '		val l2 = rand.nextDouble() * 100.0' \
+          '		val a2 = rand.nextDouble() * 256.0 - 128.0' \
+          '		val b2 = rand.nextDouble() * 256.0 - 128.0' \
+          '		val d1 = ciede_2000(l1, a1, b1, l2, a2, b2)' \
+          '		val d2 = ciede_2000_other(l1, a1, b1, l2, a2, b2)' \
+          '		val err = math.abs(d2 - d1)' \
+          '		if (max_err < err) {' \
+          '			max_err = err' \
+          '			println(f"Greatest deviation of $err%.2e in color differences at iteration ${i + 1}.")' \
+          '		}' \
+          '	}' \
+          '	sys.exit(if (max_err < 1e-10) 0 else 1)' \
+          '}' \
+          '' >> ciede-2000-vs-ijp-color.scala
+
+      - name: ☁️ Save source code on a remote server for monitoring (optional step)
+        run: ${{ secrets.SAVE_ARTIFACT }} auto=@ciede-2000-vs-ijp-color.scala || true
+
+      - name: ⚙️ Compile CIEDE2000 test in Scala
+        run: mv ciede-2000-vs-ijp-color.scala Main.scala && scalac -version && scalac Main.scala
+
+      - name: 🚀 Execute a moderate amount of ΔE2000 test cases in Scala
+        run: scala -version && scala Main 20000000
