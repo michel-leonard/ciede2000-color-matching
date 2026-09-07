@@ -1,0 +1,15 @@
+name: Overview of the Ubuntu System
+on: workflow_dispatch
+
+jobs:
+  ubuntu-system-info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: 📦 Install fastfetch
+        run: |
+          wget --no-verbose --no-check-certificate --timeout=5 --tries=2 https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb
+          sudo apt-get install -y ./fastfetch-linux-amd64.deb
+
+      - name: ✔️ Display system info
+        run: fastfetch
