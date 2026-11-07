@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Color Comparison in JavaScript - Demo with CDN</title>
+	<style>body{font-family:sans-serif;max-width:960px;margin:auto;padding:2rem;line-height:1.6}pre{background:#f4f4f4;padding:1rem;overflow-x:auto}code{font-family:monospace}h2,h3{margin-top:2rem}.result{font-weight:700;color:#0070f3}</style>
+	<script src="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@v1.0.0/docs/assets/scripts/ciede-2000.min.js"></script>
+</head>
+<body>
+
+<h2>RGB and Hexadecimal Color Comparison in JavaScript with CDN</h2>
+
+<p>
+	<em><a href="https://cdn.jsdelivr.net/gh/michel-leonard/ciede2000-color-matching@latest/docs/assets/scripts/ciede-2000.min.js">Just 3kb</a></em> - Simple. Fast. Easy to use. This JavaScript function accepts both <strong>RGB</strong> and <strong>hexadecimal color formats</strong> and computes the color difference using the CIE ΔE 2000 formula and the standard illuminant <strong>D65</strong> :
+</p>
+
+<pre><code>// Example usage:
+var delta_e = ciede_2000('#00F', '#483D8B');
+</code></pre>
+
+<p>
+	For reference, the contrast between lime green (<code>#9f0</code>) and dark navy (<code>#006</code>) yields a ΔE2000 value of 119.
+</p>
+
+<h3>Use Cases</h3>
+
+<h4>Example 1 : Compare Hex vs Hex</h4>
+<pre><code>var delta_e = ciede_2000('#000', '#FFF');</code></pre>
+<div class="result" id="ex1"></div>
+
+<h4>Example 2 : Compare Hex vs RGB</h4>
+<pre><code>var delta_e = ciede_2000('#483d8b', 75, 0, 130);</code></pre>
+<div class="result" id="ex2"></div>
+
+<h4>Example 3 : Compare RGB vs Hex</h4>
+<pre><code>var delta_e = ciede_2000(75, 0, 130, '#00008b');</code></pre>
+<div class="result" id="ex3"></div>
+
+<h4>Example 4 : Compare RGB vs RGB</h4>
+<pre><code>var delta_e = ciede_2000(0, 0, 139, 0, 0, 128);</code></pre>
+<div class="result" id="ex4"></div>
+
+<script>
+	document.getElementById("ex1").textContent = "ΔE2000 ≈ " + ciede_2000('#000', '#FFF').toFixed(2) + " — classical reference";
+	document.getElementById("ex2").textContent = "ΔE2000 ≈ " + ciede_2000('#483d8b', 75, 0, 130).toFixed(2) + " — distinct difference";
+	document.getElementById("ex3").textContent = "ΔE2000 ≈ " + ciede_2000(75, 0, 130, '#00008b').toFixed(2) + " — moderate difference";
+	document.getElementById("ex4").textContent = "ΔE2000 ≈ " + ciede_2000(0, 0, 139, 0, 0, 128).toFixed(2) + " — slight difference";
+</script>
+
+</body>
+</html>
